@@ -1,11 +1,10 @@
 'use client'
 
 import { useChat } from 'ai/react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Message } from 'ai'
 import ChatMessage from './ChatMessage'
-
-const STORAGE_KEY = 'atlantiskb-chat-messages'
 
 const EXAMPLE_PROMPTS = [
   "What's a good 2x4 LED troffer for a school classroom?",
@@ -14,19 +13,15 @@ const EXAMPLE_PROMPTS = [
   'Show me high bay fixtures for a warehouse over 20,000 lumens',
 ]
 
-// ─── Suggested follow-up chips ─────────────────────────────────────────────────
-
 function getFollowUpSuggestions(messages: Message[]): string[] {
   const last = messages[messages.length - 1]
   if (!last || last.role !== 'assistant') return []
-
   const hasSearch = last.toolInvocations?.some(
     (inv) => inv.toolName === 'search_products' && inv.state === 'result'
   )
   const hasCrossRef = last.toolInvocations?.some(
     (inv) => inv.toolName === 'cross_reference' && inv.state === 'result'
   )
-
   if (hasSearch) {
     return [
       'View spec sheet for the first result',
@@ -40,281 +35,288 @@ function getFollowUpSuggestions(messages: Message[]): string[] {
   return []
 }
 
-// ─── Load / save localStorage ─────────────────────────────────────────────────
-
-function loadMessages(): Message[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? (JSON.parse(saved) as Message[]) : []
-  } catch {
-    return []
-  }
+function titleFromMessages(messages: Message[]): string {
+  const first = messages.find((m) => m.role === 'user')
+  if (!first || typeof first.content !== 'string') return 'New chat'
+  return first.content.slice(0, 60).trim() + (first.content.length > 60 ? '…' : '')
 }
 
-export default function ChatInterface() {
+interface Props {
+  chatId?: string
+}
+
+export default function ChatInterface({ chatId }: Props) {
+  const router = useRouter()
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
-  const [initialMessages] = useState<Message[]>(() => loadMessages())
+  const [initialMessages, setInitialMessages] = useState<Message[]>([])
+  const [loadingMessages, setLoadingMessages] = useState(!!chatId)
+  const currentChatIdRef = useRef<string | null>(chatId ?? null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isSavingRef = useRef(false)
+
+  // Load messages from DB when chatId is provided
+  useEffect(() => {
+    if (!chatId) { setLoadingMessages(false); return }
+    fetch(`/api/chats/${chatId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((chat) => {
+        if (chat?.messages) setInitialMessages(chat.messages)
+        setLoadingMessages(false)
+      })
+      .catch(() => setLoadingMessages(false))
+  }, [chatId])
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, append, setMessages } =
-    useChat({
-      api: '/api/chat',
-      initialMessages,
-    })
+    useChat({ api: '/api/chat', initialMessages })
 
-  // Persist messages to localStorage
-  useEffect(() => {
-    if (messages.length > 0) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
-      } catch {
-        // Storage full — ignore
-      }
+  // Save messages to DB (debounced)
+  const saveToDb = useCallback(async (msgs: Message[], id: string) => {
+    if (isSavingRef.current) return
+    isSavingRef.current = true
+    try {
+      const body: Record<string, unknown> = { messages: msgs }
+      if (msgs.length <= 2) body.title = titleFromMessages(msgs)
+      await fetch(`/api/chats/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      window.dispatchEvent(new CustomEvent('chat-updated'))
+    } finally {
+      isSavingRef.current = false
     }
-  }, [messages])
+  }, [])
 
-  // Auto-scroll to bottom on new messages/streaming
   useEffect(() => {
-    if (autoScroll) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messages.length === 0 || isLoading) return
+
+    // First message in a new chat: create DB record and navigate to /chat/[id]
+    if (!currentChatIdRef.current) {
+      const title = titleFromMessages(messages)
+      fetch('/api/chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, messages }),
+      })
+        .then((r) => r.json())
+        .then((chat) => {
+          currentChatIdRef.current = chat.id
+          router.replace(`/chat/${chat.id}`, { scroll: false })
+          window.dispatchEvent(new CustomEvent('chat-updated'))
+        })
+      return
     }
+
+    // Debounced save for existing chat
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveToDb(messages, currentChatIdRef.current!)
+    }, 800)
+
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [messages, isLoading, saveToDb, router])
+
+  useEffect(() => {
+    if (autoScroll) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, autoScroll])
 
   const handleScroll = () => {
     const el = containerRef.current
     if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
-    setAutoScroll(atBottom)
+    setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 100)
   }
 
-  // Textarea auto-grow (max 4 rows ≈ 120px)
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     handleInputChange(e)
     e.target.style.height = 'auto'
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      if (!isLoading && input.trim()) {
-        handleSubmit(e as unknown as React.FormEvent)
-      }
+      if (!isLoading && input.trim()) handleSubmit(e as unknown as React.FormEvent)
     }
   }
 
-  const sendMessage = (text: string) => {
-    append({ role: 'user', content: text })
-  }
+  const sendMessage = (text: string) => append({ role: 'user', content: text })
+  const handleAddToSubmittal = (catalogNumber: string) => sendMessage(`Add ${catalogNumber} to my submittal`)
 
-  // "Add to Submittal" from product card routes through chat to keep state in sync
-  const handleAddToSubmittal = (catalogNumber: string) => {
-    sendMessage(`Add ${catalogNumber} to my submittal`)
-  }
-
-  const clearConversation = () => {
-    localStorage.removeItem(STORAGE_KEY)
+  const handleNewChat = () => {
     setMessages([])
+    currentChatIdRef.current = null
+    router.push('/')
   }
 
   const followUpSuggestions = getFollowUpSuggestions(messages)
+  const canSend = !isLoading && !!input.trim()
+
+  if (loadingMessages) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 44px)', color: 'var(--text-muted)', fontSize: 13 }}>
+        Loading…
+      </div>
+    )
+  }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: 'calc(100vh - 44px)',
-        background: '#f3f3f3',
-      }}
-    >
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 44px)', background: 'var(--bg)', margin: -24 }}>
+
       {/* Message list */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 8px' }}
+        className="chat-scroll"
+        style={{ flex: 1, overflowY: 'auto', padding: '32px 0 16px' }}
       >
-        {/* Empty state */}
-        {messages.length === 0 && (
-          <div style={{ textAlign: 'center', marginTop: '12vh', color: '#555' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>💡</div>
-            <h2
-              style={{
-                fontSize: 22,
-                fontWeight: 700,
-                marginBottom: 8,
-                color: '#1a1a1a',
-              }}
-            >
-              Lighting Expert
-            </h2>
-            <p
-              style={{
-                fontSize: 14,
-                color: '#6b6b6b',
-                maxWidth: 480,
-                margin: '0 auto 24px',
-                lineHeight: 1.6,
-              }}
-            >
-              Ask me anything about lighting fixtures, specs, or applications.
-              I can search products, cross-reference between manufacturers,
-              pull up spec sheets, and add fixtures to your submittal.
-            </p>
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 8,
-                justifyContent: 'center',
-                maxWidth: 560,
-                margin: '0 auto',
-              }}
-            >
-              {EXAMPLE_PROMPTS.map((prompt) => (
+        <div style={{ maxWidth: 780, margin: '0 auto', padding: '0 28px' }}>
+
+          {messages.length === 0 && (
+            <div style={{ textAlign: 'center', paddingTop: '10vh' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 48, height: 48, background: 'var(--accent)', marginBottom: 20 }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M9 2h6l1 5H8L9 2Z" fill="white" fillOpacity=".9"/>
+                  <path d="M8 7h8l1 3H7L8 7Z" fill="white" fillOpacity=".7"/>
+                  <path d="M12 10v8M9 14l3 4 3-4" stroke="white" strokeWidth="1.5" strokeLinecap="square"/>
+                </svg>
+              </div>
+              <h2 style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.3px', color: 'var(--text)', marginBottom: 8 }}>
+                Lighting Expert
+              </h2>
+              <p style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 420, margin: '0 auto 32px', lineHeight: 1.65 }}>
+                Search products, cross-reference manufacturers, pull spec sheets, and build submittals — all in conversation.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 560, margin: '0 auto' }}>
+                {EXAMPLE_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    onClick={() => sendMessage(prompt)}
+                    className="prompt-chip"
+                    style={{
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      padding: '12px 14px',
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      textAlign: 'left',
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {messages.map((msg) => (
+            <ChatMessage key={msg.id} message={msg} onAddToSubmittal={handleAddToSubmittal} />
+          ))}
+
+          {!isLoading && followUpSuggestions.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4, marginBottom: 20, paddingLeft: 2 }}>
+              {followUpSuggestions.map((s) => (
                 <button
-                  key={prompt}
-                  onClick={() => sendMessage(prompt)}
+                  key={s}
+                  onClick={() => sendMessage(s)}
+                  className="followup-chip"
                   style={{
-                    background: '#fff',
-                    border: '1px solid #d0d0d0',
-                    padding: '8px 14px',
-                    fontSize: 13,
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    padding: '5px 12px 5px 10px',
+                    fontSize: 12,
                     cursor: 'pointer',
-                    color: '#1a1a1a',
-                    textAlign: 'left',
-                    lineHeight: 1.4,
+                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
                   }}
                 >
-                  {prompt}
+                  <span style={{ color: 'var(--accent)', fontSize: 10 }}>▶</span>
+                  {s}
                 </button>
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Conversation */}
-        {messages.map((msg) => (
-          <ChatMessage
-            key={msg.id}
-            message={msg}
-            onAddToSubmittal={handleAddToSubmittal}
-          />
-        ))}
-
-        {/* Follow-up suggestion chips */}
-        {!isLoading && followUpSuggestions.length > 0 && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-            {followUpSuggestions.map((s) => (
-              <button
-                key={s}
-                onClick={() => sendMessage(s)}
-                style={{
-                  background: '#fff',
-                  border: '1px solid #d0d0d0',
-                  padding: '5px 12px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  color: '#444',
-                }}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div ref={bottomRef} />
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {/* Input area */}
-      <div
-        style={{
-          background: '#fff',
-          borderTop: '1px solid rgba(0,0,0,0.12)',
-          padding: '12px 16px',
-          display: 'flex',
-          gap: 8,
-          alignItems: 'flex-end',
-        }}
-      >
-        <div style={{ flex: 1 }}>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleTextareaChange}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              isLoading
-                ? 'Thinking…'
-                : 'Ask about fixtures, specs, or applications…'
-            }
-            disabled={isLoading}
-            rows={1}
-            style={{
-              width: '100%',
-              resize: 'none',
-              border: '1px solid #ccc',
-              padding: '9px 12px',
-              fontSize: 14,
-              fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
-              lineHeight: 1.5,
-              outline: 'none',
-              background: isLoading ? '#f9f9f9' : '#fff',
-              color: '#1a1a1a',
-              boxSizing: 'border-box',
-              overflow: 'hidden',
-            }}
-          />
+      <div style={{
+        background: 'var(--surface)',
+        borderTop: '1px solid var(--border)',
+        padding: '14px 28px 10px',
+        boxShadow: '0 -4px 24px rgba(0,0,0,0.04)',
+      }}>
+        <div style={{ maxWidth: 780, margin: '0 auto' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDown}
+              placeholder={isLoading ? 'Thinking…' : 'Ask about fixtures, specs, or applications…'}
+              disabled={isLoading}
+              rows={1}
+              className="chat-input"
+              style={{
+                flex: 1,
+                resize: 'none',
+                border: '1px solid var(--border)',
+                borderBottom: '2px solid var(--border)',
+                padding: '9px 12px',
+                fontSize: 14,
+                lineHeight: 1.5,
+                background: 'var(--bg)',
+                color: 'var(--text)',
+                overflow: 'hidden',
+                transition: 'border-color 0.15s ease',
+              }}
+            />
+            <button
+              onClick={(e) => handleSubmit(e as unknown as React.FormEvent)}
+              disabled={!canSend}
+              className="send-btn"
+              style={{
+                background: canSend ? 'var(--accent)' : 'var(--border)',
+                color: canSend ? '#fff' : 'var(--text-faint)',
+                border: 'none',
+                width: 40,
+                height: 40,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: canSend ? 'pointer' : 'default',
+                flexShrink: 0,
+                alignSelf: 'flex-end',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M2 8h10M8 3l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="square" strokeLinejoin="miter"/>
+              </svg>
+            </button>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 7 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+              Enter to send · Shift+Enter for newline
+            </span>
+            {messages.length > 0 && (
+              <button
+                onClick={handleNewChat}
+                style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 11, padding: 0 }}
+              >
+                New chat
+              </button>
+            )}
+          </div>
         </div>
-
-        <button
-          onClick={(e) => handleSubmit(e as unknown as React.FormEvent)}
-          disabled={isLoading || !input.trim()}
-          style={{
-            background: isLoading || !input.trim() ? '#ccc' : '#d13438',
-            color: '#fff',
-            border: 'none',
-            padding: '9px 18px',
-            fontSize: 14,
-            cursor: isLoading || !input.trim() ? 'default' : 'pointer',
-            alignSelf: 'flex-end',
-            flexShrink: 0,
-          }}
-        >
-          Send ➤
-        </button>
       </div>
-
-      {/* Clear conversation */}
-      {messages.length > 0 && (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '4px 0 8px',
-            fontSize: 11,
-            color: '#aaa',
-            background: '#fff',
-          }}
-        >
-          <button
-            onClick={clearConversation}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#aaa',
-              cursor: 'pointer',
-              fontSize: 11,
-              textDecoration: 'underline',
-            }}
-          >
-            Clear conversation
-          </button>
-        </div>
-      )}
     </div>
   )
 }

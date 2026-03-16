@@ -38,158 +38,132 @@ export default function ProductInlineCard({ product, onAddToSubmittal }: Props) 
 
   return (
     <div
+      className="product-card"
       style={{
-        background: '#fff',
-        border: '1px solid #e0e0e0',
-        marginBottom: 8,
-        padding: '10px 12px',
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderLeft: '3px solid var(--accent)',
+        marginBottom: 6,
         fontSize: 13,
+        overflow: 'hidden',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
         {/* Thumbnail */}
-        <div
-          style={{
-            width: 80,
-            height: 80,
-            flexShrink: 0,
-            background: '#f5f5f5',
-            border: '1px solid #e8e8e8',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-          }}
-        >
+        <div style={{
+          width: 72,
+          height: 72,
+          flexShrink: 0,
+          background: 'var(--bg)',
+          borderRight: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        }}>
           {thumbnailUrl ? (
             <img
               src={thumbnailUrl}
               alt={product.catalogNumber}
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              onError={(e) => {
-                ;(e.target as HTMLImageElement).style.display = 'none'
-              }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
             />
           ) : (
-            <span style={{ color: '#bbb', fontSize: 11 }}>No img</span>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ opacity: 0.2 }}>
+              <rect x="3" y="6" width="14" height="8" stroke="#666" strokeWidth="1.5"/>
+              <path d="M7 6V4h6v2" stroke="#666" strokeWidth="1.5"/>
+            </svg>
           )}
         </div>
 
         {/* Info */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, padding: '10px 12px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 13 }}>
+            <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.02em', color: 'var(--text)' }}>
               {product.catalogNumber}
             </span>
-            <span style={{ color: '#6b6b6b', fontSize: 12 }}>
+            <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {product.manufacturer?.name}
             </span>
           </div>
 
           {product.displayName && (
-            <div
-              style={{
-                color: '#444',
-                marginTop: 2,
-                fontSize: 12,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
+            <div style={{ color: 'var(--text-secondary)', marginTop: 2, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {product.displayName}
             </div>
           )}
 
-          <div
-            style={{
-              display: 'flex',
-              gap: 10,
-              marginTop: 4,
-              color: '#555',
-              fontSize: 12,
-              flexWrap: 'wrap',
-            }}
-          >
-            {lumensDisplay && <span>{lumensDisplay}</span>}
-            {wattageDisplay && <span>{wattageDisplay}</span>}
-            {product.cri != null && <span>CRI {product.cri}</span>}
-            {cctDisplay && <span>{cctDisplay}</span>}
+          {/* Specs row */}
+          <div style={{ display: 'flex', gap: 12, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+            {lumensDisplay && (
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>{lumensDisplay}</span>
+            )}
+            {wattageDisplay && (
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{wattageDisplay}</span>
+            )}
+            {product.cri != null && (
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>CRI {product.cri}</span>
+            )}
+            {cctDisplay && (
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{cctDisplay}</span>
+            )}
             {product.voltage && (
-              <span>{product.voltage.replace(/_/g, '/').replace(/^V/, '')}V</span>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {product.voltage.replace(/_/g, '/').replace(/^V/, '')}V
+              </span>
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+          {/* Badges row */}
+          <div style={{ display: 'flex', gap: 5, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             {product.dlcPremium && (
-              <span
-                style={{
-                  background: '#e6f4ea',
-                  color: '#2d7a3c',
-                  fontSize: 11,
-                  padding: '1px 6px',
-                  fontWeight: 600,
-                }}
-              >
+              <span style={{ background: '#e6f4ea', color: '#2d7a3c', fontSize: 10, padding: '2px 7px', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                 DLC Premium
               </span>
             )}
             {product.dlcListed && !product.dlcPremium && (
-              <span
-                style={{
-                  background: '#e6f4ea',
-                  color: '#2d7a3c',
-                  fontSize: 11,
-                  padding: '1px 6px',
-                  fontWeight: 600,
-                }}
-              >
+              <span style={{ background: '#e6f4ea', color: '#2d7a3c', fontSize: 10, padding: '2px 7px', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                 DLC
               </span>
             )}
             {product.wetLocation && (
-              <span
-                style={{
-                  background: '#e8f0fe',
-                  color: '#1a4a9c',
-                  fontSize: 11,
-                  padding: '1px 6px',
-                  fontWeight: 600,
-                }}
-              >
-                Wet Location
+              <span style={{ background: '#eef2ff', color: '#3730a3', fontSize: 10, padding: '2px 7px', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                Wet Loc
               </span>
             )}
           </div>
 
           {/* Actions */}
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button
               onClick={() => setShowSpec(!showSpec)}
               style={{
                 fontSize: 12,
-                padding: '4px 10px',
+                padding: '4px 11px',
                 background: 'transparent',
-                border: '1px solid #ccc',
+                border: '1px solid var(--border-strong)',
                 cursor: 'pointer',
-                color: '#1a1a1a',
+                color: 'var(--text-secondary)',
+                fontWeight: 500,
+                transition: 'border-color 0.12s',
               }}
             >
-              {showSpec ? 'Hide Spec Sheet' : 'View Spec Sheet'}
+              {showSpec ? 'Hide Spec' : 'Spec Sheet'}
             </button>
             {onAddToSubmittal && (
               <button
                 onClick={() => onAddToSubmittal(product.catalogNumber)}
                 style={{
                   fontSize: 12,
-                  padding: '4px 10px',
-                  background: '#d13438',
+                  padding: '4px 11px',
+                  background: 'var(--accent)',
                   color: '#fff',
                   border: 'none',
                   cursor: 'pointer',
+                  fontWeight: 500,
                 }}
               >
-                Add to Submittal
+                + Submittal
               </button>
             )}
           </div>
@@ -198,7 +172,7 @@ export default function ProductInlineCard({ product, onAddToSubmittal }: Props) 
 
       {/* Inline spec sheet */}
       {showSpec && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ borderTop: '1px solid var(--border)' }}>
           <SpecSheetPreview
             catalogNumber={product.catalogNumber}
             displayName={product.displayName}

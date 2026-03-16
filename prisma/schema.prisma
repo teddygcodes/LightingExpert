@@ -1,0 +1,360 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Environment {
+  INDOOR
+  OUTDOOR
+  BOTH
+}
+
+enum Application {
+  COMMERCIAL
+  INDUSTRIAL
+  RETAIL
+  OFFICE
+  WAREHOUSE
+  HEALTHCARE
+  EDUCATION
+  HOSPITALITY
+  RESIDENTIAL
+  OUTDOOR_AREA
+  HAZARDOUS
+}
+
+enum Voltage {
+  V120
+  V277
+  V120_277
+  V347
+  V347_480
+  V120_347
+  UNIVERSAL
+}
+
+enum DimmingType {
+  V0_10
+  DALI
+  TRIAC
+  PHASE
+  LUTRON
+  ELV
+  NLIGHT
+}
+
+enum MountingType {
+  RECESSED
+  SURFACE
+  PENDANT
+  CHAIN
+  POLE
+  WALL
+  GROUND
+  TRACK
+  STEM
+  CABLE
+  GRID_TBAR
+}
+
+enum MatchType {
+  DIRECT_REPLACEMENT
+  FUNCTIONAL_EQUIVALENT
+  UPGRADE
+  SIMILAR
+  BUDGET_ALTERNATIVE
+}
+
+enum CrossRefSource {
+  RULE_BASED
+  AI_GENERATED
+  MANUAL
+}
+
+enum SubmittalStatus {
+  DRAFT
+  GENERATED
+  SUBMITTED
+  APPROVED
+  APPROVED_AS_NOTED
+  REVISE_RESUBMIT
+  REJECTED
+  FINAL
+  ISSUED_FOR_REVIEW
+  ISSUED_FOR_CONSTRUCTION
+  SUPERSEDED
+}
+
+enum CrawlStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  PARTIAL
+  INTERRUPTED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model Manufacturer {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  website   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  products   Product[]
+  categories Category[]
+  crawlLogs  CrawlLog[]
+}
+
+model Category {
+  id             String       @id @default(cuid())
+  manufacturerId String
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id])
+  parentId       String?
+  parent         Category?    @relation("SubCategories", fields: [parentId], references: [id])
+  children       Category[]   @relation("SubCategories")
+  name           String
+  slug           String
+  // Tree-local path only — does NOT include manufacturer slug.
+  // Example: "interior-lighting/flat-panel/2x2"
+  // Immutable after creation unless a subtree repair job runs.
+  path           String?
+  sortOrder      Int          @default(0)
+  sourceUrl      String?      // originating URL from crawl — aids reconciliation
+  externalKey    String?      // manufacturer-side stable ID if available
+  products       Product[]
+
+  // Uniqueness scoped to parent to allow same slug under different parents
+  @@unique([manufacturerId, parentId, slug])
+  // Also unique by full path within a manufacturer (prevents inconsistent trees)
+  @@unique([manufacturerId, path])
+  @@index([manufacturerId])
+  @@index([parentId])
+  @@index([manufacturerId, parentId, sortOrder])
+}
+
+model Product {
+  id             String    @id @default(cuid())
+  manufacturerId String
+  manufacturer   Manufacturer @relation(fields: [manufacturerId], references: [id])
+
+  // Category (per-manufacturer tree)
+  categoryId     String?
+  category       Category? @relation(fields: [categoryId], references: [id])
+
+  // Identity
+  catalogNumber  String
+  familyName     String?
+  displayName    String?
+  description    String?
+  isActive       Boolean   @default(true)
+
+  // Classification
+  environment    Environment?
+  application    Application?
+
+  // Electrical
+  wattage        Float?
+  wattageMin     Float?
+  wattageMax     Float?
+  voltage        Voltage?
+  dimmable       Boolean?
+  dimmingType    DimmingType[]
+  powerFactor    Float?
+
+  // Light output
+  lumens         Int?
+  lumensMin      Int?
+  lumensMax      Int?
+  efficacy       Float?
+  cri            Int?
+  cctOptions     Int[]
+  colorTemp      Int?
+  beamAngle      Float?
+
+  // Physical
+  formFactor     String?
+  dimensions     String?
+  weight         Float?
+  finish         String?
+  ipRating       String?
+  nemaRating     String?
+  mountingType   MountingType[]
+
+  // Locations
+  wetLocation    Boolean?
+  dampLocation   Boolean?
+
+  // Certifications
+  ulListed       Boolean?
+  dlcListed      Boolean?
+  dlcPremium     Boolean?
+  energyStar     Boolean?
+  title24        Boolean?
+
+  // Emergency
+  emergencyBackup Boolean?
+
+  // Documents
+  specSheetUrl    String?
+  specSheetPath   String?
+  specSheets      Json?    // Array<{label:string, url:string, path?:string}>
+  productPageUrl  String?
+
+  // Extraction metadata
+  fieldProvenance  Json?
+  overallConfidence Float?
+  crawlEvidence    Json?
+  configOptions    Json?
+  lastCrawled      DateTime?
+
+  // Verification
+  lastVerifiedAt   DateTime?
+  verifiedBy       String?
+
+  // Full-text search vector (maintained by Postgres trigger)
+  searchVector    Unsupported("tsvector")? @map("search_vector")
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  crossRefsAsSource  CrossReference[] @relation("SourceProduct")
+  crossRefsAsTarget  CrossReference[] @relation("TargetProduct")
+  submittalItems     SubmittalItem[]
+
+  @@unique([manufacturerId, catalogNumber])
+  @@index([manufacturerId])
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([isActive, categoryId, manufacturerId])
+  @@index([dlcListed])
+  @@index([lastCrawled])
+}
+
+model CrossReference {
+  id              String   @id @default(cuid())
+  sourceProductId String
+  targetProductId String
+  sourceProduct   Product  @relation("SourceProduct", fields: [sourceProductId], references: [id])
+  targetProduct   Product  @relation("TargetProduct", fields: [targetProductId], references: [id])
+
+  matchType         MatchType
+  confidence        Float
+  matchReason       String?
+  hardRejectReason  String?
+
+  comparisonSnapshot Json?
+  source          CrossRefSource @default(RULE_BASED)
+
+  // Approval (v1.5)
+  isApproved      Boolean?
+  approvedBy      String?
+  approvedAt      DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sourceProductId, targetProductId])
+  @@index([sourceProductId])
+  @@index([targetProductId])
+}
+
+model Submittal {
+  id             String          @id @default(cuid())
+  projectName    String
+  projectNumber  String?
+  projectAddress String?
+  clientName     String?
+  contractorName String?
+  preparedBy     String?
+  preparedFor    String?
+  revisionNumber Int             @default(0)
+  revision       String?
+  status         SubmittalStatus @default(DRAFT)
+  pdfPath        String?
+  pdfUrl         String?
+  generatedAt    DateTime?
+  notes          String?
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  items          SubmittalItem[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SubmittalItem {
+  id            String    @id @default(cuid())
+  submittalId   String
+  submittal     Submittal @relation(fields: [submittalId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  fixtureType   String
+  quantity      Int
+  location      String?
+  mountingHeight Float?
+  notes         String?
+  sortOrder     Int       @default(0)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([submittalId])
+}
+
+model ChatProject {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chats     Chat[]
+
+  @@index([createdAt])
+}
+
+model Chat {
+  id        String       @id @default(cuid())
+  title     String?
+  projectId String?
+  project   ChatProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  messages  Json         @default("[]")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([projectId])
+  @@index([updatedAt])
+}
+
+model CrawlLog {
+  id              String       @id @default(cuid())
+  manufacturerId  String
+  manufacturer    Manufacturer @relation(fields: [manufacturerId], references: [id])
+  status          CrawlStatus  @default(RUNNING)
+  categories      String[]
+
+  productsFound   Int          @default(0)
+  productsNew     Int          @default(0)
+  productsUpdated Int          @default(0)
+  productsCached  Int          @default(0)
+  parseFailures   Int          @default(0)
+  avgConfidence   Float?
+
+  errors          Json?
+  startedAt       DateTime     @default(now())
+  completedAt     DateTime?
+
+  @@index([manufacturerId])
+  @@index([startedAt])
+}

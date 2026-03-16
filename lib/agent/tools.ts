@@ -3,10 +3,13 @@
 
 import { tool } from 'ai'
 import { z } from 'zod'
+import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/db'
 import { searchProducts } from '@/lib/products-search'
 import { findMatches } from '@/lib/cross-reference'
 import type { ComparisonSnapshot } from '@/lib/types'
+
+const anthropic = new Anthropic()
 
 // ─── Helper: derive human-readable differences from comparisonSnapshot ─────────
 
@@ -166,19 +169,36 @@ export const searchProductsTool = tool({
 
 export const crossReferenceTool = tool({
   description:
-    "Find equivalent fixtures from other manufacturers. Given a catalog number, find matching products with similar specs. Use this when someone asks 'what's the equivalent of X in Y brand' or 'cross reference this fixture'.",
+    "Find equivalent fixtures from other manufacturers. IMPORTANT: the catalogNumber parameter must be a real catalog number already retrieved from the database — call search_products first if the user only gave a partial description, family name, or spec. Use this when someone asks 'what's the equivalent of X in Y brand' or 'cross reference this fixture'.",
   parameters: crossReferenceSchema,
   execute: async ({ catalogNumber, targetManufacturer }: z.infer<typeof crossReferenceSchema>) => {
     try {
-      const source = await prisma.product.findFirst({
+      const mfrInclude = { manufacturer: { select: { name: true, slug: true } } }
+      // 1. Exact match
+      let source = await prisma.product.findFirst({
         where: { catalogNumber: { equals: catalogNumber, mode: 'insensitive' }, isActive: true },
-        include: { manufacturer: { select: { name: true, slug: true } } },
+        include: mfrInclude,
       })
+      // 2. Catalog number starts with input (e.g. "CPX" → "CPX 2X4 L40")
+      if (!source) {
+        source = await prisma.product.findFirst({
+          where: { catalogNumber: { startsWith: catalogNumber, mode: 'insensitive' }, isActive: true },
+          include: mfrInclude,
+          orderBy: { catalogNumber: 'asc' },
+        })
+      }
+      // 3. Family name exact match (e.g. "CPX" is a familyName)
+      if (!source) {
+        source = await prisma.product.findFirst({
+          where: { familyName: { equals: catalogNumber, mode: 'insensitive' }, isActive: true },
+          include: mfrInclude,
+        })
+      }
       if (!source) {
         return { error: `Product not found: "${catalogNumber}". Check the catalog number and try again.` }
       }
 
-      const { matches, rejects } = await findMatches(source.id)
+      const { matches, rejects, filterLevel } = await findMatches(source.id)
 
       const filtered = targetManufacturer
         ? matches.filter((m) => m.manufacturerSlug === targetManufacturer)
@@ -194,6 +214,64 @@ export const crossReferenceTool = tool({
         importantDifferences: deriveImportantDifferences(m.comparisonSnapshot, m.matchReason),
       }))
 
+      // ─── AI verification: filter out fixture-type mismatches ─────────────────
+      let verifiedMatches = top5
+      if (top5.length > 0) {
+        try {
+          const sourceDesc = [
+            source.displayName,
+            source.familyName,
+            source.lumens ? `${source.lumens} lumens` : null,
+            source.wattage ? `${source.wattage}W` : null,
+            source.voltage ?? null,
+            source.dlcListed ? 'DLC listed' : null,
+            source.wetLocation ? 'wet location rated' : null,
+          ].filter(Boolean).join(', ')
+
+          // Fetch familyName for richer candidate context
+          const candidateMeta = await prisma.product.findMany({
+            where: { catalogNumber: { in: top5.map((m) => m.catalogNumber) } },
+            select: { catalogNumber: true, familyName: true },
+          })
+          const familyMap = new Map(candidateMeta.map((p) => [p.catalogNumber, p.familyName]))
+
+          const candidateList = top5
+            .map((m, i) => {
+              const family = familyMap.get(m.catalogNumber)
+              const label = family && family !== m.displayName ? `${m.displayName} (${family})` : m.displayName
+              return `${i + 1}. ${m.catalogNumber} — ${label}`
+            })
+            .join('\n')
+
+          const verifyMsg = await anthropic.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 256,
+            messages: [{
+              role: 'user',
+              content: `Source fixture: ${source.catalogNumber} — ${sourceDesc}
+
+Candidates returned as possible equivalents:
+${candidateList}
+
+Reply with a JSON array of catalog numbers to KEEP. Only remove obvious wrong fixture types (sign lights, roadway fixtures, decorative pendants, exit/emergency, sensors). Keep industrial/commercial overhead fixtures even if not an exact type match. Format: {"keep":["CAT1","CAT2",...]}`,
+            }],
+          })
+
+          const raw = verifyMsg.content[0].type === 'text' ? verifyMsg.content[0].text : ''
+          const jsonMatch = raw.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]) as { keep: string[] }
+            if (Array.isArray(parsed.keep)) {
+              const keepSet = new Set(parsed.keep.map((s: string) => s.toUpperCase()))
+              verifiedMatches = top5.filter((m) => keepSet.has(m.catalogNumber.toUpperCase()))
+              console.log(`[cross-ref] AI verification: kept ${verifiedMatches.length}/${top5.length}`, parsed.keep)
+            }
+          }
+        } catch (err) {
+          console.warn('[cross-ref] AI verification failed, using unfiltered results:', err)
+        }
+      }
+
       return {
         source: {
           catalogNumber: source.catalogNumber,
@@ -204,8 +282,14 @@ export const crossReferenceTool = tool({
           cri: source.cri,
           cctOptions: source.cctOptions,
         },
-        matches: top5,
+        matches: verifiedMatches,
         rejectCount: rejects.length,
+        filterLevel,
+        filterDescription: filterLevel === 'group'
+          ? 'Results scoped to same fixture category only'
+          : filterLevel === 'branch'
+          ? 'Results scoped to same indoor/outdoor branch'
+          : 'Broad search — fixture category could not be determined',
       }
     } catch (err) {
       return { error: `Cross-reference failed: ${err instanceof Error ? err.message : 'Unknown error'}` }
