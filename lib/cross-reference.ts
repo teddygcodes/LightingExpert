@@ -1,4 +1,4 @@
-import { Product, MatchType, CrossRefSource, Prisma } from '@prisma/client'
+import { Product, MatchType, CrossRefSource, CanonicalFixtureType, Prisma } from '@prisma/client'
 import { prisma } from './db'
 import type { HardRejectReason, CrossRefMatch, CrossRefReject, ComparisonSnapshot } from './types'
 
@@ -24,16 +24,6 @@ interface RejectResult {
 }
 
 function runHardRejects(source: ProductWithManufacturer, target: ProductWithManufacturer): RejectResult | null {
-  // 0. Category group incompatible
-  const sourceGroup = getFixtureGroup(source)
-  const targetGroup = getFixtureGroup(target)
-  if (sourceGroup && targetGroup && sourceGroup !== targetGroup) {
-    return {
-      reason: 'category_incompatible' as HardRejectReason,
-      detail: `Source group ${sourceGroup} (${source.category?.slug ?? 'null'}) vs target group ${targetGroup} (${target.category?.slug ?? 'null'})`,
-    }
-  }
-
   // 1. Environment mismatch
   if (
     source.environment && target.environment &&
@@ -366,195 +356,28 @@ type ProductWithManufacturer = Product & {
   category: { name: string; slug: string; path: string | null } | null
 }
 
-// ─── Category Compatibility ───────────────────────────────────────────────────
-
-// Authoritative: category path segments are ground truth for fixture type.
-// Checked before regex fallback on product text.
-const PATH_SEGMENT_TO_GROUP: Record<string, string> = {
-  // High bay / low bay
-  'high-bay':           'HIGH_BAY',
-  'highbay':            'HIGH_BAY',
-  'high-bay-low-bay':   'HIGH_BAY',
-  'low-bay':            'HIGH_BAY',
-  'low-bays':           'HIGH_BAY',
-  'bay-lighting':       'HIGH_BAY',
-  'linear-high-bays':   'HIGH_BAY',
-  'round-high-bays':    'HIGH_BAY',
-
-  // Troffers / flat panels
-  'flat-panel':         'TROFFER_PANEL',
-  'troffers':           'TROFFER_PANEL',
-  'troffer':            'TROFFER_PANEL',
-  'troffers-panels':    'TROFFER_PANEL',
-  'decorative-troffer': 'TROFFER_PANEL',
-  'troffer-parabolic':  'TROFFER_PANEL',
-  'recessed-volumetric':'TROFFER_PANEL',
-  't-bar-led':          'TROFFER_PANEL',
-  '2x4':                'TROFFER_PANEL',
-  '2x2':                'TROFFER_PANEL',
-  '1x4':                'TROFFER_PANEL',
-
-  // Downlights / recessed
-  'downlight':                  'DOWNLIGHT',
-  'downlights':                 'DOWNLIGHT',
-  'view-all-downlights':        'DOWNLIGHT',
-  'accent-downlighting':        'DOWNLIGHT',
-  'adjustable-downlighting':    'DOWNLIGHT',
-  'general-purpose-downlighting':'DOWNLIGHT',
-  'residential-downlighting':   'DOWNLIGHT',
-  'recessed':                   'DOWNLIGHT',
-  'cylinders':                  'DOWNLIGHT',
-  'outdoor-cylinders':          'DOWNLIGHT',
-  'architectural-cylinders':    'DOWNLIGHT',
-
-  // Wall packs
-  'wall-pack':                  'WALL_PACK',
-  'wall-packs':                 'WALL_PACK',
-  'outdoor-wall-packs-lighting':'WALL_PACK',
-
-  // Wall mount / sconces
-  'wall-mount':           'WALL_MOUNT',
-  'sconces':              'WALL_MOUNT',
-  'wall-sconce':          'WALL_MOUNT',
-  'outdoor-wall-mount':   'WALL_MOUNT',
-  'indoor-wall-mount':    'WALL_MOUNT',
-  'surface-wall-mount':   'WALL_MOUNT',
-  'decorative-wall-mount':'WALL_MOUNT',
-  'wall-brackets':        'WALL_MOUNT',
-
-  // Strip
-  'strip':                'STRIP',
-  'linear-strip':         'STRIP',
-  'commercial-strip-lights':'STRIP',
-
-  // Linear architectural
-  'linear':               'LINEAR',
-  'linear-slot':          'LINEAR',
-  'linear-suspended':     'LINEAR',
-  'surface-linear':       'LINEAR',
-  'recessed-linear-slot': 'LINEAR',
-  'suspended-linear-slot':'LINEAR',
-  'surface-mount-linear-slot':'LINEAR',
-  'wall-mount-linear-slot':'LINEAR',
-  'outdoor-linear':       'LINEAR',
-  'cove-lighting':        'LINEAR',
-  'under-cabinet':        'LINEAR',
-  'undercabinet':         'LINEAR',
-
-  // Pendants
-  'pendant':              'PENDANT',
-  'pendants':             'PENDANT',
-  'architectural-pendant':'PENDANT',
-  'pendants-semi-flush':  'PENDANT',
-
-  // Surface mount
-  'surface-mount':        'SURFACE_MOUNT',
-  'surface-lighting':     'SURFACE_MOUNT',
-  'flush-surface-mounts': 'SURFACE_MOUNT',
-  'surface-mount-linear-slot': 'SURFACE_MOUNT',
-
-  // Wraps / vapor tight
-  'wrap':                 'WRAP',
-  'wraps':                'WRAP',
-  'vapor-tight':          'WRAP',
-  'vaporproof':           'WRAP',
-  'enclosed-gasketed':    'WRAP',
-
-  // Flood
-  'flood':                'FLOOD',
-  'floods':               'FLOOD',
-  'flood-lighting':       'FLOOD',
-  'floodlighting':        'FLOOD',
-  'floodlighting-landscape':'FLOOD',
-  'sport-light':          'FLOOD',
-  'sports-lighting':      'FLOOD',
-
-  // Area / site
-  'area-light':           'AREA_SITE',
-  'area-site':            'AREA_SITE',
-  'area-site-lighting':   'AREA_SITE',
-  'area-site-roadway':    'AREA_SITE',
-  'site-light':           'AREA_SITE',
-}
-
-// Regex fallback: applied to product text only (displayName, familyName, catalogNumber)
-// when path-based detection yields no result. "panel" and "cpx" removed — too broad.
-const COMPATIBLE_GROUPS: Record<string, RegExp> = {
-  TROFFER_PANEL:  /troffer|flat.?panel|troffers.?panels|2x4|2x2|1x4/i,
-  HIGH_BAY:       /high.?bay|low.?bay|bay.?light/i,
-  WRAP:           /\bwrap\b|vapor.?tight/i,
-  WALL_PACK:      /wall.?pack/i,
-  STRIP:          /\bstrip\b|linear.?strip/i,
-  LINEAR:         /\blinear\b/i,
-  DOWNLIGHT:      /downlight|recessed|cylinder/i,
-  WALL_MOUNT:     /wall.?mount|sconce/i,
-  SURFACE_MOUNT:  /surface.?mount/i,
-  PENDANT:        /\bpendant\b/i,
-  FLOOD:          /\bflood/i,
-  AREA_SITE:      /area.?site|area.?light|site.?light/i,
-}
-
-function getFixtureGroup(product: ProductWithManufacturer): string | null {
-  // 1. Category path segments — most authoritative
-  if (product.category?.path) {
-    for (const seg of product.category.path.toLowerCase().split('/')) {
-      const group = PATH_SEGMENT_TO_GROUP[seg]
-      if (group) return group
-    }
-  }
-  // 2. Category slug directly
-  if (product.category?.slug) {
-    const group = PATH_SEGMENT_TO_GROUP[product.category.slug.toLowerCase()]
-    if (group) return group
-  }
-  // 3. Regex fallback on product text only (category is handled above)
-  const haystack = [
-    product.displayName ?? '',
-    product.familyName ?? '',
-    product.catalogNumber ?? '',
-  ].join(' ')
-  if (!haystack.trim()) return null
-  for (const [group, pattern] of Object.entries(COMPATIBLE_GROUPS)) {
-    if (pattern.test(haystack)) return group
-  }
-  return null
-}
-
-// ─── Candidate Pool Pre-filter ────────────────────────────────────────────────
-
-type FilterLevel = 'group' | 'branch' | 'all'
-
-function getCandidatePool(
-  source: ProductWithManufacturer,
-  all: ProductWithManufacturer[]
-): { candidates: ProductWithManufacturer[]; filterLevel: FilterLevel } {
-  const sourceGroup = getFixtureGroup(source)
-
-  // Pass 1: strict — same fixture group
-  if (sourceGroup) {
-    const pool = all.filter(p => getFixtureGroup(p) === sourceGroup)
-    if (pool.length >= 5) return { candidates: pool, filterLevel: 'group' }
-    console.log(`[cross-ref] group filter yielded only ${pool.length} candidates for group ${sourceGroup}, relaxing to branch`)
-  }
-
-  // Pass 2: relaxed — same root branch (e.g. interior-lighting vs exterior-lighting)
-  const rootBranch = source.category?.path?.split('/')[0] ?? null
-  if (rootBranch) {
-    const pool = all.filter(p => {
-      const pPath = p.category?.path ?? ''
-      return pPath === rootBranch || pPath.startsWith(rootBranch + '/')
-    })
-    if (pool.length >= 5) return { candidates: pool, filterLevel: 'branch' }
-    console.log(`[cross-ref] branch filter yielded only ${pool.length} candidates for branch ${rootBranch}, using all`)
-  }
-
-  // Pass 3: no category data — score everything
-  return { candidates: all, filterLevel: 'all' }
+// Compatible types — some fixture types are interchangeable for cross-reference
+const COMPATIBLE_TYPES: Partial<Record<string, string[]>> = {
+  HIGH_BAY: ['HIGH_BAY', 'LOW_BAY'],
+  LOW_BAY: ['HIGH_BAY', 'LOW_BAY'],
+  TROFFER: ['TROFFER', 'FLAT_PANEL'],
+  FLAT_PANEL: ['TROFFER', 'FLAT_PANEL'],
+  DOWNLIGHT: ['DOWNLIGHT', 'RECESSED_CAN', 'CYLINDER'],
+  RECESSED_CAN: ['DOWNLIGHT', 'RECESSED_CAN'],
+  CYLINDER: ['DOWNLIGHT', 'CYLINDER'],
+  LINEAR_SUSPENDED: ['LINEAR_SUSPENDED', 'LINEAR_SURFACE', 'LINEAR_SLOT'],
+  LINEAR_SURFACE: ['LINEAR_SUSPENDED', 'LINEAR_SURFACE'],
+  LINEAR_SLOT: ['LINEAR_SUSPENDED', 'LINEAR_SLOT'],
+  WALL_MOUNT: ['WALL_MOUNT', 'SCONCE'],
+  SCONCE: ['WALL_MOUNT', 'SCONCE'],
+  CANOPY: ['CANOPY', 'GARAGE'],
+  GARAGE: ['CANOPY', 'GARAGE'],
 }
 
 export async function findMatches(
-  sourceId: string
-): Promise<{ matches: CrossRefMatch[]; rejects: CrossRefReject[]; filterLevel: FilterLevel }> {
+  sourceId: string,
+  targetManufacturerSlug?: string
+): Promise<{ matches: CrossRefMatch[]; rejects: CrossRefReject[]; filterLevel: string }> {
   const catSelect = { select: { name: true, slug: true, path: true } }
   const source = await prisma.product.findUnique({
     where: { id: sourceId },
@@ -563,14 +386,33 @@ export async function findMatches(
 
   if (!source) throw new Error('Source product not found')
 
-  // Get all other active products, then pre-filter to same fixture group
-  const allCandidates = await prisma.product.findMany({
-    where: { isActive: true, id: { not: sourceId } },
-    include: { manufacturer: { select: { name: true, slug: true } }, category: catSelect },
+  const sourceType = source.canonicalFixtureType
+
+  if (!sourceType) {
+    console.log(`[cross-ref] source ${source.catalogNumber} has no canonicalFixtureType — cannot cross-reference`)
+    return { matches: [], rejects: [], filterLevel: 'untyped' }
+  }
+
+  const allowedTypes = (COMPATIBLE_TYPES[sourceType] ?? [sourceType]) as CanonicalFixtureType[]
+
+  const candidates = await prisma.product.findMany({
+    where: {
+      isActive: true,
+      id: { not: sourceId },
+      canonicalFixtureType: { in: allowedTypes },
+      // Cross-reference is between manufacturers
+      manufacturerId: { not: source.manufacturerId },
+      ...(targetManufacturerSlug ? { manufacturer: { slug: targetManufacturerSlug } } : {}),
+    },
+    include: {
+      manufacturer: { select: { name: true, slug: true } },
+      category: catSelect,
+    },
   }) as ProductWithManufacturer[]
 
-  const { candidates, filterLevel } = getCandidatePool(source, allCandidates)
-  console.log(`[cross-ref] using ${filterLevel} filter: ${candidates.length}/${allCandidates.length} candidates for ${source.catalogNumber} (group: ${getFixtureGroup(source) ?? 'none'}, category: ${source.category?.path ?? 'null'})`)
+  console.log(`[cross-ref] ${source.catalogNumber} (${sourceType}) → ${candidates.length} candidates of types [${allowedTypes.join(', ')}]`)
+
+  const filterLevel = 'canonical'
 
   const matches: CrossRefMatch[] = []
   const rejects: CrossRefReject[] = []

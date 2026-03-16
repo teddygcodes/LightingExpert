@@ -15,6 +15,7 @@ import type {
 interface Props {
   message: Message
   onAddToSubmittal?: (catalogNumber: string) => void
+  onSelectProduct?: (catalogNumber: string) => void
 }
 
 function ToolLoadingIndicator({ toolName }: { toolName: string }) {
@@ -52,12 +53,42 @@ function ConfidenceBadge({ pct }: { pct: number }) {
   )
 }
 
+function sanitizeContent(content: string, toolInvocations?: ToolInvocation[]): string {
+  if (!content || !toolInvocations?.length) return content
+  const hasProductCards = toolInvocations.some(
+    (inv) =>
+      inv.state === 'result' &&
+      (
+        (inv.toolName === 'search_products' &&
+          ((inv as ToolInvocation & { state: 'result'; result: unknown }).result as SearchProductsToolResult)?.total > 0) ||
+        (inv.toolName === 'cross_reference' &&
+          !((inv as ToolInvocation & { state: 'result'; result: unknown }).result as Record<string, unknown>)?.error)
+      )
+  )
+  if (!hasProductCards) return content
+  const lines = content.split('\n')
+  const out: string[] = []
+  for (const line of lines) {
+    if (/^\s*\|/.test(line)) continue
+    if (/^[ \t]*[-*][ \t]+\*\*[A-Z][A-Z0-9][A-Z0-9\-_./ ]{0,28}\*\*/.test(line)) continue
+    if (/^[ \t]*\d+\.[ \t]+\*\*[A-Z][A-Z0-9][A-Z0-9\-_./ ]{0,28}\*\*/.test(line)) continue
+    out.push(line)
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 function ToolResultRenderer({
   invocation,
   onAddToSubmittal,
+  onSelectProduct,
+  allInvocations,
+  messageContent,
 }: {
   invocation: ToolInvocation & { state: 'result' }
   onAddToSubmittal?: (catalogNumber: string) => void
+  onSelectProduct?: (catalogNumber: string) => void
+  allInvocations: ToolInvocation[]
+  messageContent: string
 }) {
   const { toolName, result } = invocation as ToolInvocation & { state: 'result'; result: unknown }
 
@@ -78,8 +109,73 @@ function ToolResultRenderer({
   if (toolName === 'search_products') {
     const r = result as SearchProductsToolResult
     if (!r.products?.length) {
+      // Suppress ghost empty-result card if another search in this message succeeded
+      const hasSuccessfulSibling = allInvocations.some(
+        (other) =>
+          other.toolCallId !== invocation.toolCallId &&
+          other.toolName === 'search_products' &&
+          other.state === 'result' &&
+          ((other as ToolInvocation & { state: 'result'; result: unknown }).result as SearchProductsToolResult)?.total > 0
+      )
+      if (hasSuccessfulSibling) return null
       return <div style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic', padding: '4px 0' }}>No products found matching those criteria.</div>
     }
+    const isThisDisambig =
+      r.total >= 2 && r.total <= 8 &&
+      /which|pick\s+one|select\s+one/i.test(messageContent)
+
+    // If any sibling search_products in this message is a disambiguation block,
+    // suppress this one (it was a broad exploratory search, not the final result).
+    const anyOtherDisambig = allInvocations.some((other) => {
+      if (other.toolCallId === invocation.toolCallId) return false
+      if (other.toolName !== 'search_products' || other.state !== 'result') return false
+      const o = (other as ToolInvocation & { state: 'result'; result: unknown }).result as SearchProductsToolResult
+      return (
+        o?.total >= 2 && o?.total <= 8 &&
+        /which|pick\s+one|select\s+one/i.test(messageContent)
+      )
+    })
+    if (anyOtherDisambig && !isThisDisambig) return null
+
+    if (isThisDisambig) {
+      return (
+        <div style={{ marginTop: 6, border: '1px solid var(--border)' }}>
+          {r.products.map((p, i) => (
+            <div
+              key={p.id}
+              onClick={() => onSelectProduct?.(p.catalogNumber)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '10px 14px',
+                borderBottom: i < r.products.length - 1 ? '1px solid var(--border)' : 'none',
+                background: 'var(--surface)',
+                cursor: onSelectProduct ? 'pointer' : 'default',
+                transition: 'background 0.1s',
+              }}
+              onMouseEnter={(e) => { if (onSelectProduct) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg)' }}
+              onMouseLeave={(e) => { if (onSelectProduct) (e.currentTarget as HTMLDivElement).style.background = 'var(--surface)' }}
+            >
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, minWidth: 160, color: 'var(--text)' }}>
+                {p.catalogNumber}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {p.displayName ?? p.familyName ?? ''}
+                {p.voltage ? ` · ${p.voltage.replace('V_', '').replace('_', '/')}V` : ''}
+                {p.lumens ? ` · ${p.lumens.toLocaleString()} lm` : ''}
+              </span>
+              {p.dlcPremium && (
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#15803d', background: '#f0fdf4', padding: '2px 6px', border: '1px solid #bbf7d0', flexShrink: 0 }}>
+                  DLC PREMIUM
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )
+    }
+
     return (
       <div style={{ marginTop: 6 }}>
         {r.products.map((p) => (
@@ -94,69 +190,119 @@ function ToolResultRenderer({
 
   if (toolName === 'cross_reference') {
     const r = result as CrossReferenceToolResult
-    if (!r.matches?.length) {
-      return <div style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic' }}>No cross-reference matches found.</div>
-    }
-    return (
-      <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
-          Equivalents found
-        </div>
-        {r.matches.map((m, i) => {
-          const pct = Math.round(m.confidence * 100)
-          const accentColor = pct >= 80 ? '#15803d' : pct >= 60 ? '#b45309' : '#b91c1c'
-          return (
-            <div
-              key={i}
-              style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderTop: i === 0 ? `2px solid ${accentColor}` : '1px solid var(--border)',
-                marginBottom: 4,
-                padding: '10px 14px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.02em' }}>
-                      {m.catalogNumber}
-                    </span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>
-                      {m.manufacturerSlug}
+    // Support old shape (matches) and new shape (exactMatches) for session cache compat
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const exactMatches = r.exactMatches ?? (r as any).matches ?? []
+
+    const sourceLine = (
+      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 8, display: 'flex', gap: 6, alignItems: 'baseline' }}>
+        <span style={{ fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 10 }}>
+          Source fixture
+        </span>
+        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>
+          {r.source.catalogNumber}
+        </span>
+        <span style={{ color: 'var(--text-faint)' }}>
+          {r.source.manufacturer}
+          {r.source.lumens ? ` · ${r.source.lumens.toLocaleString()} lm` : ''}
+          {r.source.wattage ? ` · ${r.source.wattage}W` : ''}
+        </span>
+      </div>
+    )
+
+    // State 1: exact cross-reference matches
+    if (exactMatches.length > 0) {
+      return (
+        <div style={{ marginTop: 6 }}>
+          {sourceLine}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+            Exact cross-reference matches
+          </div>
+          {exactMatches.map((m, i) => {
+            const pct = Math.round(m.confidence * 100)
+            const accentColor = pct >= 80 ? '#15803d' : pct >= 60 ? '#b45309' : '#b91c1c'
+            return (
+              <div
+                key={i}
+                style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderTop: i === 0 ? `2px solid ${accentColor}` : '1px solid var(--border)',
+                  marginBottom: 4,
+                  padding: '10px 14px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.02em' }}>
+                        {m.catalogNumber}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>
+                        {m.manufacturerSlug}
+                      </span>
+                    </div>
+                    {m.displayName && (
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{m.displayName}</div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <ConfidenceBadge pct={pct} />
+                    <span style={{ fontSize: 10, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {m.matchType.replace(/_/g, ' ')}
                     </span>
                   </div>
-                  {m.displayName && (
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{m.displayName}</div>
-                  )}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                  <ConfidenceBadge pct={pct} />
-                  <span style={{ fontSize: 10, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    {m.matchType.replace(/_/g, ' ')}
-                  </span>
-                </div>
+                {m.importantDifferences.length > 0 && m.importantDifferences[0] !== 'No significant differences identified' && (
+                  <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {m.importantDifferences.map((d, j) => (
+                      <span key={j} style={{
+                        fontSize: 11, color: 'var(--text-secondary)',
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border)',
+                        padding: '2px 8px',
+                      }}>
+                        {d}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
+            )
+          })}
+          <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
+            {r.rejectCount} hard-rejected (incompatible specs)
+          </div>
+        </div>
+      )
+    }
 
-              {m.importantDifferences.length > 0 && m.importantDifferences[0] !== 'No significant differences identified' && (
-                <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {m.importantDifferences.map((d, j) => (
-                    <span key={j} style={{
-                      fontSize: 11, color: 'var(--text-secondary)',
-                      background: 'var(--bg)',
-                      border: '1px solid var(--border)',
-                      padding: '2px 8px',
-                    }}>
-                      {d}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
-          {r.rejectCount} hard-rejected (incompatible specs)
+    // State 2: fallback alternatives (no exact cross-ref, but auto-searched target mfr)
+    if (r.fallbackUsed && r.fallbackAlternatives?.length > 0) {
+      return (
+        <div style={{ marginTop: 6 }}>
+          {sourceLine}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+            Closest alternatives (no exact cross-reference)
+          </div>
+          {r.fallbackAlternatives.map((p) => (
+            <ProductInlineCard key={p.id} product={p} onAddToSubmittal={onAddToSubmittal} />
+          ))}
+          <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
+            {r.filterDescription}
+          </div>
+        </div>
+      )
+    }
+
+    // State 3: nothing available
+    return (
+      <div style={{ marginTop: 6 }}>
+        {sourceLine}
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic' }}>
+          {r.filterLevel === 'untyped'
+            ? 'Fixture not classified — cross-reference unavailable.'
+            : 'No cross-reference matches found.'}
         </div>
       </div>
     )
@@ -248,7 +394,7 @@ const markdownComponents = {
   hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '12px 0' }} />,
 }
 
-export default function ChatMessage({ message, onAddToSubmittal }: Props) {
+export default function ChatMessage({ message, onAddToSubmittal, onSelectProduct }: Props) {
   const isUser = message.role === 'user'
 
   if (isUser) {
@@ -284,7 +430,7 @@ export default function ChatMessage({ message, onAddToSubmittal }: Props) {
         {message.content && (
           <div style={{ marginBottom: message.toolInvocations?.length ? 10 : 0 }}>
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {message.content}
+              {sanitizeContent(message.content, message.toolInvocations)}
             </ReactMarkdown>
           </div>
         )}
@@ -297,6 +443,9 @@ export default function ChatMessage({ message, onAddToSubmittal }: Props) {
               <ToolResultRenderer
                 invocation={inv as ToolInvocation & { state: 'result' }}
                 onAddToSubmittal={onAddToSubmittal}
+                onSelectProduct={onSelectProduct}
+                allInvocations={message.toolInvocations ?? []}
+                messageContent={message.content ?? ''}
               />
             )}
           </div>

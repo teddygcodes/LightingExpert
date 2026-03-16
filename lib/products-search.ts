@@ -2,7 +2,7 @@
 // Shared product search logic used by both /api/products and the chat agent tool.
 
 import { prisma } from '@/lib/db'
-import { Prisma } from '@prisma/client'
+import { Prisma, CanonicalFixtureType } from '@prisma/client'
 
 export async function getDescendantCategoryIds(rootId: string, manufacturerId: string): Promise<string[]> {
   const all = await prisma.category.findMany({
@@ -32,6 +32,7 @@ export interface SearchProductsParams {
   query?: string
   manufacturerSlug?: string
   categorySlug?: string
+  fixtureType?: string
   minLumens?: number
   maxWattage?: number
   cct?: string
@@ -74,6 +75,11 @@ export async function searchProducts(params: SearchProductsParams): Promise<Sear
   // Manufacturer filter (by slug)
   if (params.manufacturerSlug) {
     where.manufacturer = { slug: params.manufacturerSlug }
+  }
+
+  // Canonical fixture type filter
+  if (params.fixtureType) {
+    where.canonicalFixtureType = params.fixtureType as CanonicalFixtureType
   }
 
   // Category filter — find by slug, expand descendants

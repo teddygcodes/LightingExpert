@@ -144,6 +144,7 @@ export default function ChatInterface({ chatId }: Props) {
 
   const sendMessage = (text: string) => append({ role: 'user', content: text })
   const handleAddToSubmittal = (catalogNumber: string) => sendMessage(`Add ${catalogNumber} to my submittal`)
+  const handleSelectProduct = (catalogNumber: string) => sendMessage(`spec sheet for ${catalogNumber}`)
 
   const handleNewChat = () => {
     setMessages([])
@@ -214,7 +215,7 @@ export default function ChatInterface({ chatId }: Props) {
           )}
 
           {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} onAddToSubmittal={handleAddToSubmittal} />
+            <ChatMessage key={msg.id} message={msg} onAddToSubmittal={handleAddToSubmittal} onSelectProduct={handleSelectProduct} />
           ))}
 
           {!isLoading && followUpSuggestions.length > 0 && (

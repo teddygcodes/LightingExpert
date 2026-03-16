@@ -21,7 +21,9 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:push": "echo '⚠️  db:push can silently drop data. Use db:migrate instead. Run with FORCE=1 to bypass.' && [ \"$FORCE\" = '1' ] && prisma db push || exit 1",
     "db:seed": "ts-node --esm --project tsconfig.scripts.json prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "classify": "ts-node --project tsconfig.scripts.json scripts/classify-fixtures.ts",
+    "classify:ai": "ts-node --project tsconfig.scripts.json scripts/classify-fixtures-ai.ts"
   },
   "prisma": {
     "seed": "npm run db:seed"

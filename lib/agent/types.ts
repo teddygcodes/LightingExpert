@@ -86,8 +86,13 @@ export interface CrossReferenceToolResult {
     cri: number | null
     cctOptions: number[]
   }
-  matches: CrossRefMatchResult[]
+  exactMatches: CrossRefMatchResult[]
+  fallbackAlternatives: ProductSearchResult[]
+  fallbackUsed: boolean
+  fallbackInferredSpecs?: Record<string, unknown>
   rejectCount: number
+  filterLevel: string
+  filterDescription: string
 }
 
 export interface SpecSheetToolResult {

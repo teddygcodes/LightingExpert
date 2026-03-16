@@ -3,13 +3,10 @@
 
 import { tool } from 'ai'
 import { z } from 'zod'
-import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/db'
 import { searchProducts } from '@/lib/products-search'
 import { findMatches } from '@/lib/cross-reference'
 import type { ComparisonSnapshot } from '@/lib/types'
-
-const anthropic = new Anthropic()
 
 // ─── Helper: derive human-readable differences from comparisonSnapshot ─────────
 
@@ -93,6 +90,16 @@ const searchProductsSchema = z.object({
   environment: z.enum(['indoor', 'outdoor', 'both']).optional().describe('Indoor, outdoor, or both'),
   dlcListed: z.boolean().optional().describe('Must be DLC listed'),
   wetLocation: z.boolean().optional().describe('Must be wet location rated'),
+  fixtureType: z.enum([
+    'HIGH_BAY', 'LOW_BAY', 'TROFFER', 'FLAT_PANEL', 'DOWNLIGHT', 'RECESSED_CAN',
+    'CYLINDER', 'VAPOR_TIGHT', 'WALL_PACK', 'WALL_MOUNT', 'SCONCE', 'FLOOD',
+    'AREA_SITE', 'ROADWAY', 'CANOPY', 'GARAGE', 'LINEAR_SUSPENDED', 'LINEAR_SURFACE',
+    'LINEAR_SLOT', 'STRIP', 'WRAP', 'PENDANT', 'SURFACE_MOUNT', 'TRACK', 'BOLLARD',
+    'LANDSCAPE', 'POST_TOP', 'STEP_LIGHT', 'UNDER_CABINET', 'EXIT_EMERGENCY',
+    'VANITY', 'COVE', 'RETROFIT_KIT', 'CONTROLS', 'SENSOR', 'DRIVER', 'POWER_SUPPLY',
+    'MODULAR_WIRING', 'POLE', 'ARM_BRACKET', 'ACCESSORY', 'SPORTS_LIGHTING', 'UV_C',
+    'SURGICAL', 'CLEANROOM', 'VANDAL_RESISTANT', 'BEHAVIORAL', 'DECORATIVE', 'OTHER',
+  ]).optional().describe('Canonical fixture type. Use when you know the exact fixture type needed. Examples: HIGH_BAY for high bays, TROFFER for troffers/2x4, DOWNLIGHT for recessed downlights, WALL_PACK for exterior wall packs.'),
   limit: z.number().optional().describe('Max results to return. Default 10, max 20.'),
 })
 
@@ -132,6 +139,7 @@ export const searchProductsTool = tool({
         params.query ||
         params.manufacturer ||
         params.categorySlug ||
+        params.fixtureType ||
         params.minLumens != null ||
         params.maxWattage != null ||
         params.cct ||
@@ -148,6 +156,7 @@ export const searchProductsTool = tool({
         query: params.query,
         manufacturerSlug: params.manufacturer,
         categorySlug: params.categorySlug,
+        fixtureType: params.fixtureType,
         minLumens: params.minLumens,
         maxWattage: params.maxWattage,
         cct: params.cct,
@@ -198,13 +207,9 @@ export const crossReferenceTool = tool({
         return { error: `Product not found: "${catalogNumber}". Check the catalog number and try again.` }
       }
 
-      const { matches, rejects, filterLevel } = await findMatches(source.id)
+      const { matches, rejects, filterLevel } = await findMatches(source.id, targetManufacturer)
 
-      const filtered = targetManufacturer
-        ? matches.filter((m) => m.manufacturerSlug === targetManufacturer)
-        : matches
-
-      const top5 = filtered.slice(0, 5).map((m) => ({
+      const top5 = matches.slice(0, 5).map((m) => ({
         catalogNumber: m.catalogNumber,
         displayName: m.displayName,
         manufacturerSlug: m.manufacturerSlug,
@@ -214,61 +219,49 @@ export const crossReferenceTool = tool({
         importantDifferences: deriveImportantDifferences(m.comparisonSnapshot, m.matchReason),
       }))
 
-      // ─── AI verification: filter out fixture-type mismatches ─────────────────
-      let verifiedMatches = top5
-      if (top5.length > 0) {
-        try {
-          const sourceDesc = [
-            source.displayName,
-            source.familyName,
-            source.lumens ? `${source.lumens} lumens` : null,
-            source.wattage ? `${source.wattage}W` : null,
-            source.voltage ?? null,
-            source.dlcListed ? 'DLC listed' : null,
-            source.wetLocation ? 'wet location rated' : null,
-          ].filter(Boolean).join(', ')
+      // ── Fallback: if no exact matches, auto-search the target manufacturer
+      //    using specs inferred from the source product.
+      const needsFallback = filterLevel === 'untyped' || top5.length === 0
+      let fallbackAlternatives: Awaited<ReturnType<typeof searchProducts>> = []
+      let fallbackUsed = false
+      let fallbackInferredSpecs: Record<string, unknown> | undefined
 
-          // Fetch familyName for richer candidate context
-          const candidateMeta = await prisma.product.findMany({
-            where: { catalogNumber: { in: top5.map((m) => m.catalogNumber) } },
-            select: { catalogNumber: true, familyName: true },
-          })
-          const familyMap = new Map(candidateMeta.map((p) => [p.catalogNumber, p.familyName]))
+      if (needsFallback) {
+        const inferredParams: Parameters<typeof searchProducts>[0] = { limit: 5 }
 
-          const candidateList = top5
-            .map((m, i) => {
-              const family = familyMap.get(m.catalogNumber)
-              const label = family && family !== m.displayName ? `${m.displayName} (${family})` : m.displayName
-              return `${i + 1}. ${m.catalogNumber} — ${label}`
-            })
-            .join('\n')
+        if (targetManufacturer) inferredParams.manufacturerSlug = targetManufacturer
 
-          const verifyMsg = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 256,
-            messages: [{
-              role: 'user',
-              content: `Source fixture: ${source.catalogNumber} — ${sourceDesc}
+        if (source.canonicalFixtureType) {
+          inferredParams.fixtureType = source.canonicalFixtureType as string
+        }
 
-Candidates returned as possible equivalents:
-${candidateList}
+        // Lumen floor: prefer lumensMin if available, else 80% of lumens
+        const lumenFloor = source.lumensMin ?? (source.lumens ? Math.floor(source.lumens * 0.8) : undefined)
+        if (lumenFloor) inferredParams.minLumens = lumenFloor
 
-Reply with a JSON array of catalog numbers to KEEP. Only remove obvious wrong fixture types (sign lights, roadway fixtures, decorative pendants, exit/emergency, sensors). Keep industrial/commercial overhead fixtures even if not an exact type match. Format: {"keep":["CAT1","CAT2",...]}`,
-            }],
-          })
-
-          const raw = verifyMsg.content[0].type === 'text' ? verifyMsg.content[0].text : ''
-          const jsonMatch = raw.match(/\{[\s\S]*\}/)
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]) as { keep: string[] }
-            if (Array.isArray(parsed.keep)) {
-              const keepSet = new Set(parsed.keep.map((s: string) => s.toUpperCase()))
-              verifiedMatches = top5.filter((m) => keepSet.has(m.catalogNumber.toUpperCase()))
-              console.log(`[cross-ref] AI verification: kept ${verifiedMatches.length}/${top5.length}`, parsed.keep)
-            }
+        // Environment mapping (DB enum → search param)
+        if (source.environment) {
+          const envMap: Record<string, 'indoor' | 'outdoor' | 'both'> = {
+            INDOOR: 'indoor', OUTDOOR: 'outdoor', BOTH: 'both',
           }
-        } catch (err) {
-          console.warn('[cross-ref] AI verification failed, using unfiltered results:', err)
+          const mapped = envMap[source.environment as string]
+          if (mapped) inferredParams.environment = mapped
+        }
+
+        if (source.wetLocation) inferredParams.wetLocation = true
+        if (source.dlcListed) inferredParams.dlcListed = true
+
+        if (source.cctOptions?.length) {
+          inferredParams.cct = `${source.cctOptions[0]}K`
+        }
+
+        fallbackInferredSpecs = { ...inferredParams }
+
+        try {
+          fallbackAlternatives = await searchProducts(inferredParams)
+          fallbackUsed = true
+        } catch {
+          // silently ignore fallback failure
         }
       }
 
@@ -282,14 +275,18 @@ Reply with a JSON array of catalog numbers to KEEP. Only remove obvious wrong fi
           cri: source.cri,
           cctOptions: source.cctOptions,
         },
-        matches: verifiedMatches,
+        exactMatches: top5,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fallbackAlternatives: fallbackAlternatives as any,
+        fallbackUsed,
+        fallbackInferredSpecs,
         rejectCount: rejects.length,
         filterLevel,
-        filterDescription: filterLevel === 'group'
-          ? 'Results scoped to same fixture category only'
-          : filterLevel === 'branch'
-          ? 'Results scoped to same indoor/outdoor branch'
-          : 'Broad search — fixture category could not be determined',
+        filterDescription: filterLevel === 'canonical'
+          ? 'Results scoped to same fixture type only'
+          : fallbackUsed
+            ? `Fixture type not classified — showing closest ${targetManufacturer ?? 'alternative'} options by spec`
+            : 'Fixture type not classified — cross-reference unavailable',
       }
     } catch (err) {
       return { error: `Cross-reference failed: ${err instanceof Error ? err.message : 'Unknown error'}` }
