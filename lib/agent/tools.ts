@@ -155,6 +155,8 @@ const recommendFixturesSchema = z.object({
   minCri: z.number().optional(),
   dlcRequired: z.boolean().optional().describe('If true, only DLC-listed products are considered'),
   wetLocation: z.boolean().optional(),
+  manufacturerSlug: z.string().optional()
+    .describe('Filter to a specific manufacturer by slug (e.g. "acuity", "elite"). Also disables cross-manufacturer diversity logic — use when the user explicitly names a brand.'),
   limit: z.number().min(1).max(5).optional().describe('Top N results to return. Default 3, max 5.'),
 })
 
@@ -485,6 +487,7 @@ export const recommendFixturesTool = tool({
         dlcListed: params.dlcRequired === true ? true : undefined,
         wetLocation: params.wetLocation,
         maxWattage: ctx.maxWattage,
+        manufacturerSlug: params.manufacturerSlug,
         limit: 50,  // internal — allows scoring across full pool
       })
 
@@ -497,7 +500,7 @@ export const recommendFixturesTool = tool({
         if (retry.length === 0) {
           return { error: `No products found for fixture type ${params.fixtureType ?? 'unspecified'}.` }
         }
-        const ranked = rankCandidates(retry, ctx, Math.min(params.limit ?? 3, 5))
+        const ranked = rankCandidates(retry, ctx, Math.min(params.limit ?? 3, 5), !!params.manufacturerSlug)
         return {
           recommendations: ranked.map(c => ({
             ...c.product,
@@ -516,7 +519,7 @@ export const recommendFixturesTool = tool({
         }
       }
 
-      const ranked = rankCandidates(candidates, ctx, Math.min(params.limit ?? 3, 5))
+      const ranked = rankCandidates(candidates, ctx, Math.min(params.limit ?? 3, 5), !!params.manufacturerSlug)
 
       return {
         recommendations: ranked.map(c => ({
