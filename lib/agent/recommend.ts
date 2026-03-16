@@ -71,6 +71,7 @@ export const APPLICATION_DEFAULTS: Record<string, AppDefaults> = {
 
 export interface RecommendationContext extends AppDefaults {
   applicationType: string
+  fixtureType?: string
   minLumens?: number
   maxWattage?: number
   preferredCct?: number
@@ -80,6 +81,7 @@ export interface RecommendationContext extends AppDefaults {
 export interface RecommendParams {
   applicationType: string
   budgetSensitivity?: 'value' | 'standard' | 'premium'
+  fixtureType?: string
   minLumens?: number
   maxWattage?: number
   preferredCct?: number
@@ -112,6 +114,7 @@ export function buildRecommendationContext(params: RecommendParams): Recommendat
     ...defaults,
     projectPosture,
     applicationType: params.applicationType,
+    fixtureType: params.fixtureType,
     preferredCCTs,
     minCri,
     minLumens: params.minLumens,
@@ -229,6 +232,76 @@ export function scoreCandidate(product: SearchProductRow, ctx: RecommendationCon
   return { product, score, fitConfidence, whyRecommended, tradeoffs }
 }
 
+// ─── Fixture Class Inference ──────────────────────────────────────────────────
+
+// confirmed      = canonicalFixtureType present and matches requested type (authoritative)
+// inferred_match = canonicalFixtureType null, but positive text signal matched
+// unknown        = canonicalFixtureType null, no text signal either way — passes filter, small score penalty
+// excluded       = canonicalFixtureType present but wrong type, OR negative text signal matched
+export type ClassMatchResult = 'confirmed' | 'inferred_match' | 'unknown' | 'excluded'
+
+// Keyword signals for inferring fixture class when canonicalFixtureType is null.
+// Only populated for types commonly queried in advisory mode.
+// negative signals WIN over positive — checked first.
+const FIXTURE_CLASS_SIGNALS: Partial<Record<string, { positive: string[]; negative: string[] }>> = {
+  TROFFER: {
+    positive: [
+      'troffer', 'lay-in', 'layin', 'lay in', 'recessed troffer', 'volumetric',
+      'center basket', 'basket troffer', 'recessed lay-in', 'grid ceiling', 't-bar troffer',
+    ],
+    negative: [
+      'light bar', 'lbk', 'bar kit', 'strip', 'wrap', 'high bay',
+      'panel kit', 'retrofit bar', 'linear bar', 'surface strip',
+    ],
+  },
+  HIGH_BAY: {
+    positive: ['high bay', 'highbay', 'high-bay', 'ufo'],
+    negative: ['troffer', 'strip', 'wrap', 'wall pack', 'flat panel'],
+  },
+  FLAT_PANEL: {
+    positive: ['flat panel', 'panel led', 'edge-lit', 'backlit panel'],
+    negative: ['troffer', 'high bay', 'wrap', 'strip'],
+  },
+  WALL_PACK: {
+    positive: ['wall pack', 'wall-pack', 'wallpack'],
+    negative: ['troffer', 'high bay', 'strip', 'canopy'],
+  },
+  STRIP: {
+    positive: ['strip', 'shop light', 'shoplight', 'industrial strip'],
+    negative: ['troffer', 'high bay', 'flat panel'],
+  },
+  LINEAR_SUSPENDED: {
+    positive: ['linear suspended', 'suspended linear', 'pendant linear', 'continuous row'],
+    negative: ['troffer', 'high bay', 'strip', 'wall pack'],
+  },
+  VAPOR_TIGHT: {
+    positive: ['vapor tight', 'vaportight', 'vapor-tight'],
+    negative: ['troffer', 'high bay', 'wall pack'],
+  },
+}
+
+// Returns a fixture-class match result for a product against a requested type.
+// Uses canonicalFixtureType first (authoritative); falls back to text signals.
+// Text basis: displayName + familyName + catalogNumber.
+export function inferFixtureClass(product: SearchProductRow, requestedType: string): ClassMatchResult {
+  // 1. Canonical type present — authoritative
+  if (product.canonicalFixtureType != null) {
+    return (product.canonicalFixtureType as string) === requestedType ? 'confirmed' : 'excluded'
+  }
+
+  // 2. No canonical type — use text signals
+  const signals = FIXTURE_CLASS_SIGNALS[requestedType]
+  if (!signals) return 'unknown'  // no signals defined for this type — don't exclude
+
+  const text = [product.displayName, product.familyName, product.catalogNumber]
+    .filter(Boolean).join(' ').toLowerCase()
+
+  // Negative wins over positive
+  if (signals.negative.some(s => text.includes(s))) return 'excluded'
+  if (signals.positive.some(s => text.includes(s))) return 'inferred_match'
+  return 'unknown'
+}
+
 // ─── Diversity Selection ──────────────────────────────────────────────────────
 
 // Max score gap within which we prefer cross-manufacturer diversity.
@@ -295,7 +368,8 @@ function diversifySelection(
 // Mutates `selected` in-place.
 function enrichWithComparativeRationale(
   selected: Omit<ScoredCandidate, 'rankLabel'>[],
-  ctx: RecommendationContext
+  ctx: RecommendationContext,
+  classMatchMap?: Map<string, ClassMatchResult>
 ): void {
   const appLabel = ctx.applicationType
   const posture = ctx.projectPosture
@@ -346,6 +420,14 @@ function enrichWithComparativeRationale(
         c.tradeoffs = c.tradeoffs ? `${extra}; ${c.tradeoffs}` : extra
       }
     }
+
+    // Hedge rationale if fixture class was not canonically confirmed
+    const classMatch = classMatchMap?.get(c.product.id)
+    if (classMatch === 'inferred_match' || classMatch === 'unknown') {
+      c.tradeoffs = c.tradeoffs
+        ? `Fixture class inferred from product name/family; ${c.tradeoffs}`
+        : 'Fixture class inferred from product name/family'
+    }
   })
 }
 
@@ -353,13 +435,22 @@ export function rankCandidates(
   products: SearchProductRow[],
   ctx: RecommendationContext,
   limit: number,
-  skipDiversity = false
+  skipDiversity = false,
+  classMatchMap?: Map<string, ClassMatchResult>
 ): ScoredCandidate[] {
   const scored = products.map(p => scoreCandidate(p, ctx))
+
+  // Apply small penalty for 'unknown' fixture class in advisory mode
+  if (classMatchMap) {
+    scored.forEach(c => {
+      if (classMatchMap.get(c.product.id) === 'unknown') c.score -= 5
+    })
+  }
+
   scored.sort((a, b) => b.score - a.score)
 
   const selected = diversifySelection(scored, limit, ctx.projectPosture, skipDiversity)
-  enrichWithComparativeRationale(selected, ctx)
+  enrichWithComparativeRationale(selected, ctx, classMatchMap)
 
   const labels = ['Top pick', 'Strong alternative', 'Also consider', 'Consider', 'Alternative']
   return selected.map((c, i) => ({ ...c, rankLabel: labels[i] ?? `Option ${i + 1}` }))

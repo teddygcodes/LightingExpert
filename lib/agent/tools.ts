@@ -7,7 +7,7 @@ import { prisma } from '@/lib/db'
 import { searchProducts } from '@/lib/products-search'
 import { findMatches } from '@/lib/cross-reference'
 import type { ComparisonSnapshot } from '@/lib/types'
-import { buildRecommendationContext, rankCandidates } from '@/lib/agent/recommend'
+import { buildRecommendationContext, rankCandidates, ClassMatchResult, inferFixtureClass } from '@/lib/agent/recommend'
 
 // ─── Helper: derive human-readable differences from comparisonSnapshot ─────────
 
@@ -473,6 +473,7 @@ export const recommendFixturesTool = tool({
       const ctx = buildRecommendationContext({
         applicationType: params.applicationType,
         budgetSensitivity: params.budgetSensitivity,
+        fixtureType: params.fixtureType as string | undefined,
         minLumens: params.minLumens,
         maxWattage: params.maxWattage,
         preferredCct: params.preferredCct,
@@ -480,7 +481,7 @@ export const recommendFixturesTool = tool({
       })
 
       // Focused candidate search — indoor, fixture type, DLC preference, CRI tolerance
-      const candidates = await searchProducts({
+      let candidates = await searchProducts({
         fixtureType: params.fixtureType,
         environment: ctx.indoorPreferred ? 'indoor' : 'outdoor',
         minCri: ctx.minCri > 5 ? ctx.minCri - 5 : undefined,  // slight tolerance
@@ -500,26 +501,35 @@ export const recommendFixturesTool = tool({
         if (retry.length === 0) {
           return { error: `No products found for fixture type ${params.fixtureType ?? 'unspecified'}.` }
         }
-        const ranked = rankCandidates(retry, ctx, Math.min(params.limit ?? 3, 5), !!params.manufacturerSlug)
-        return {
-          recommendations: ranked.map(c => ({
-            ...c.product,
-            score: c.score,
-            fitConfidence: c.fitConfidence,
-            rankLabel: c.rankLabel,
-            whyRecommended: c.whyRecommended,
-            tradeoffs: c.tradeoffs,
-          })),
-          context: {
-            applicationType: params.applicationType,
-            projectPosture: ctx.projectPosture,
-            inferredDefaults: ctx.inferredDefaultsDescription,
-          },
-          evaluatedCount: retry.length,
+        candidates = retry
+      }
+
+      // ── Fixture class gating ──────────────────────────────────────────────
+      // Only active when fixtureType was passed. If Claude omits it, no filter applied.
+      const fixtureTypeRequested = params.fixtureType as string | undefined
+
+      // Build class match map (used for exclusion + scoring penalty)
+      const classMatchMap = new Map<string, ClassMatchResult>()
+      if (fixtureTypeRequested) {
+        for (const p of candidates) {
+          classMatchMap.set(p.id, inferFixtureClass(p, fixtureTypeRequested))
         }
       }
 
-      const ranked = rankCandidates(candidates, ctx, Math.min(params.limit ?? 3, 5), !!params.manufacturerSlug)
+      // Hard-exclude 'excluded' products; keep 'confirmed', 'inferred_match', 'unknown'
+      const classifiedCandidates = fixtureTypeRequested
+        ? candidates.filter(p => classMatchMap.get(p.id) !== 'excluded')
+        : candidates
+
+      // Debug: log class match for each candidate (dev only)
+      if (process.env.NODE_ENV !== 'production') {
+        candidates.forEach(p => {
+          const match = classMatchMap.get(p.id) ?? 'no-filter'
+          console.log(`[recommend:class] ${p.catalogNumber.padEnd(20)} | canonical: ${String(p.canonicalFixtureType ?? 'null').padEnd(20)} | match: ${match}`)
+        })
+      }
+
+      const ranked = rankCandidates(classifiedCandidates, ctx, Math.min(params.limit ?? 3, 5), !!params.manufacturerSlug, classMatchMap)
 
       return {
         recommendations: ranked.map(c => ({
@@ -535,7 +545,7 @@ export const recommendFixturesTool = tool({
           projectPosture: ctx.projectPosture,
           inferredDefaults: ctx.inferredDefaultsDescription,
         },
-        evaluatedCount: candidates.length,
+        evaluatedCount: classifiedCandidates.length,
       }
     } catch (err) {
       return { error: `Recommendation failed: ${err instanceof Error ? err.message : 'Unknown error'}` }
