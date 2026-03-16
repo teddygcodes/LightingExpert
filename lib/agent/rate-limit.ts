@@ -1,31 +1,30 @@
 // lib/agent/rate-limit.ts
-// Simple in-memory sliding-window rate limiter: 30 requests/minute per IP.
-// Resets on server restart — acceptable for v1.5 single-user.
+// In-memory rate limiter: 20 requests per IP per minute.
 
-const WINDOW_MS = 60_000  // 1 minute
-const MAX_REQUESTS = 30
+const WINDOW_MS = 60_000
+const MAX_REQUESTS = 20
 
-const store = new Map<string, number[]>()
+interface Entry {
+  count: number
+  windowStart: number
+}
+
+const store = new Map<string, Entry>()
 
 export function checkRateLimit(ip: string): { allowed: boolean; retryAfterMs?: number } {
   const now = Date.now()
-  const windowStart = now - WINDOW_MS
-  const timestamps = (store.get(ip) ?? []).filter((t) => t > windowStart)
+  const entry = store.get(ip)
 
-  if (timestamps.length >= MAX_REQUESTS) {
-    const oldest = timestamps[0]
-    return { allowed: false, retryAfterMs: oldest + WINDOW_MS - now }
+  if (!entry || now - entry.windowStart >= WINDOW_MS) {
+    store.set(ip, { count: 1, windowStart: now })
+    return { allowed: true }
   }
 
-  timestamps.push(now)
-  store.set(ip, timestamps)
-
-  // Periodic cleanup: evict keys with no recent requests (~1% of calls)
-  if (Math.random() < 0.01) {
-    for (const [key, ts] of store.entries()) {
-      if (ts.every((t) => t <= windowStart)) store.delete(key)
-    }
+  if (entry.count < MAX_REQUESTS) {
+    entry.count++
+    return { allowed: true }
   }
 
-  return { allowed: true }
+  const retryAfterMs = WINDOW_MS - (now - entry.windowStart)
+  return { allowed: false, retryAfterMs }
 }

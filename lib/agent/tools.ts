@@ -219,6 +219,52 @@ export const crossReferenceTool = tool({
         importantDifferences: deriveImportantDifferences(m.comparisonSnapshot, m.matchReason),
       }))
 
+      // ── Fallback: if no exact matches, auto-search the target manufacturer
+      //    using specs inferred from the source product.
+      const needsFallback = filterLevel === 'untyped' || top5.length === 0
+      let fallbackAlternatives: Awaited<ReturnType<typeof searchProducts>> = []
+      let fallbackUsed = false
+      let fallbackInferredSpecs: Record<string, unknown> | undefined
+
+      if (needsFallback) {
+        const inferredParams: Parameters<typeof searchProducts>[0] = { limit: 5 }
+
+        if (targetManufacturer) inferredParams.manufacturerSlug = targetManufacturer
+
+        if (source.canonicalFixtureType) {
+          inferredParams.fixtureType = source.canonicalFixtureType as string
+        }
+
+        // Lumen floor: prefer lumensMin if available, else 80% of lumens
+        const lumenFloor = source.lumensMin ?? (source.lumens ? Math.floor(source.lumens * 0.8) : undefined)
+        if (lumenFloor) inferredParams.minLumens = lumenFloor
+
+        // Environment mapping (DB enum → search param)
+        if (source.environment) {
+          const envMap: Record<string, 'indoor' | 'outdoor' | 'both'> = {
+            INDOOR: 'indoor', OUTDOOR: 'outdoor', BOTH: 'both',
+          }
+          const mapped = envMap[source.environment as string]
+          if (mapped) inferredParams.environment = mapped
+        }
+
+        if (source.wetLocation) inferredParams.wetLocation = true
+        if (source.dlcListed) inferredParams.dlcListed = true
+
+        if (source.cctOptions?.length) {
+          inferredParams.cct = `${source.cctOptions[0]}K`
+        }
+
+        fallbackInferredSpecs = { ...inferredParams }
+
+        try {
+          fallbackAlternatives = await searchProducts(inferredParams)
+          fallbackUsed = true
+        } catch {
+          // silently ignore fallback failure
+        }
+      }
+
       return {
         source: {
           catalogNumber: source.catalogNumber,
@@ -229,12 +275,18 @@ export const crossReferenceTool = tool({
           cri: source.cri,
           cctOptions: source.cctOptions,
         },
-        matches: top5,
+        exactMatches: top5,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fallbackAlternatives: fallbackAlternatives as any,
+        fallbackUsed,
+        fallbackInferredSpecs,
         rejectCount: rejects.length,
         filterLevel,
         filterDescription: filterLevel === 'canonical'
           ? 'Results scoped to same fixture type only'
-          : 'Fixture type not classified — cross-reference unavailable',
+          : fallbackUsed
+            ? `Fixture type not classified — showing closest ${targetManufacturer ?? 'alternative'} options by spec`
+            : 'Fixture type not classified — cross-reference unavailable',
       }
     } catch (err) {
       return { error: `Cross-reference failed: ${err instanceof Error ? err.message : 'Unknown error'}` }
