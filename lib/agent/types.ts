@@ -102,6 +102,7 @@ export interface SpecSheetToolResult {
   specSheetPath: string | null
   specSheets: unknown        // JSON array of spec sheet entries
   productPageUrl: string | null
+  matchType: 'exact_product_match' | 'family_spec_sheet_match'
 }
 
 export interface AddToSubmittalToolResult {
