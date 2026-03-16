@@ -74,7 +74,6 @@ export interface RecommendationContext extends AppDefaults {
   minLumens?: number
   maxWattage?: number
   preferredCct?: number
-  overriddenMinCri?: number
   inferredDefaultsDescription: string[]
 }
 
@@ -88,7 +87,7 @@ export interface RecommendParams {
 }
 
 export function buildRecommendationContext(params: RecommendParams): RecommendationContext {
-  const key = params.applicationType.toLowerCase().replace(/\s+/g, '_')
+  const key = params.applicationType.toLowerCase().replace(/[\s-]+/g, '_')
   const defaults = APPLICATION_DEFAULTS[key] ?? APPLICATION_DEFAULTS.default
 
   // budgetSensitivity overrides the application-type default posture
@@ -118,7 +117,6 @@ export function buildRecommendationContext(params: RecommendParams): Recommendat
     minLumens: params.minLumens,
     maxWattage: params.maxWattage,
     preferredCct: params.preferredCct,
-    overriddenMinCri: params.minCri,
     inferredDefaultsDescription,
   }
 }
@@ -226,7 +224,7 @@ export function scoreCandidate(product: SearchProductRow, ctx: RecommendationCon
   const posLabel = ctx.projectPosture.replace(/_/g, ' ')
   const primaryPositives = positives.slice(0, 3).join(', ')
   const whyBase = `${tierLabel} fixture${primaryPositives ? `, ${primaryPositives}` : ''} — ${fitConfidence >= 0.6 ? 'strong' : 'closest available'} fit for ${posLabel}`
-  const whyRecommended = fitConfidence < 0.5 ? `${whyBase} (limited spec data)` : whyBase
+  const whyRecommended = whyBase
   const tradeoffs = negatives.length > 0 ? negatives.join('; ') : undefined
 
   return { product, score, fitConfidence, whyRecommended, tradeoffs }

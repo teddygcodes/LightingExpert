@@ -155,7 +155,7 @@ const recommendFixturesSchema = z.object({
   minCri: z.number().optional(),
   dlcRequired: z.boolean().optional().describe('If true, only DLC-listed products are considered'),
   wetLocation: z.boolean().optional(),
-  limit: z.number().optional().describe('Top N results to return. Default 3, max 5.'),
+  limit: z.number().min(1).max(5).optional().describe('Top N results to return. Default 3, max 5.'),
 })
 
 // ─── Tool 1: search_products ──────────────────────────────────────────────────
@@ -480,10 +480,11 @@ export const recommendFixturesTool = tool({
       // Focused candidate search — indoor, fixture type, DLC preference, CRI tolerance
       const candidates = await searchProducts({
         fixtureType: params.fixtureType,
-        environment: ctx.indoorPreferred ? 'indoor' : undefined,
+        environment: ctx.indoorPreferred ? 'indoor' : 'outdoor',
         minCri: ctx.minCri > 5 ? ctx.minCri - 5 : undefined,  // slight tolerance
-        dlcListed: ctx.dlcPreferred && params.dlcRequired !== false ? true : undefined,
+        dlcListed: params.dlcRequired === true ? true : undefined,
         wetLocation: params.wetLocation,
+        maxWattage: ctx.maxWattage,
         limit: 50,  // internal — allows scoring across full pool
       })
 

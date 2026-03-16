@@ -449,6 +449,8 @@ function ToolResultRenderer({
       'Top pick': 'var(--accent)',
       'Strong alternative': '#15803d',
       'Also consider': 'var(--text-muted)',
+      'Consider': 'var(--text-muted)',
+      'Alternative': 'var(--text-faint)',
     }
 
     return (
