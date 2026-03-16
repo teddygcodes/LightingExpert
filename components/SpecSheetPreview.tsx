@@ -23,7 +23,6 @@ export default function SpecSheetPreview({
   specSheets,
   productPageUrl,
 }: Props) {
-  const [expanded, setExpanded] = useState(false)
   const [selectedIdx, setSelectedIdx] = useState(0)
 
   const sheets: SpecSheet[] = Array.isArray(specSheets)
@@ -63,81 +62,55 @@ export default function SpecSheetPreview({
   return (
     <div style={{ background: 'var(--surface-raised)' }}>
       {/* Header bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '8px 12px',
-        fontSize: 12,
-        borderBottom: expanded ? '1px solid var(--border)' : undefined,
-        flexWrap: 'wrap',
-      }}>
-        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0, color: 'var(--accent)' }}>
-          <path d="M2 1h7l3 3v8H2V1z" stroke="currentColor" strokeWidth="1.2"/>
-          <path d="M9 1v3h3" stroke="currentColor" strokeWidth="1.2"/>
-          <path d="M4 7h5M4 9h3" stroke="currentColor" strokeWidth="1"/>
-        </svg>
-        <span style={{ fontWeight: 600, flex: 1, minWidth: 0, color: 'var(--text-secondary)' }}>{label}</span>
+      {(sheets.length > 1 || activePath) && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 12px',
+          fontSize: 12,
+          borderBottom: '1px solid var(--border)',
+          flexWrap: 'wrap',
+        }}>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0, color: 'var(--accent)' }}>
+            <path d="M2 1h7l3 3v8H2V1z" stroke="currentColor" strokeWidth="1.2"/>
+            <path d="M9 1v3h3" stroke="currentColor" strokeWidth="1.2"/>
+            <path d="M4 7h5M4 9h3" stroke="currentColor" strokeWidth="1"/>
+          </svg>
+          <span style={{ fontWeight: 600, flex: 1, minWidth: 0, color: 'var(--text-secondary)' }}>{label}</span>
 
-        {sheets.length > 1 && (
-          <select
-            value={selectedIdx}
-            onChange={(e) => setSelectedIdx(Number(e.target.value))}
-            style={{
-              fontSize: 11,
-              border: '1px solid var(--border-strong)',
-              padding: '2px 6px',
-              background: 'var(--surface)',
-              color: 'var(--text)',
-            }}
-          >
-            {sheets.map((s, i) => (
-              <option key={i} value={i}>{s.label ?? `Sheet ${i + 1}`}</option>
-            ))}
-          </select>
-        )}
-
-        <button
-          onClick={() => setExpanded(!expanded)}
-          style={{
-            fontSize: 11,
-            padding: '3px 10px',
-            background: 'transparent',
-            border: '1px solid var(--border-strong)',
-            cursor: 'pointer',
-            color: 'var(--text-secondary)',
-            fontWeight: 500,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          {expanded ? (
-            <>
-              <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 5l3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square"/></svg>
-              Collapse
-            </>
-          ) : (
-            <>
-              <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 3l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square"/></svg>
-              Expand
-            </>
+          {sheets.length > 1 && (
+            <select
+              value={selectedIdx}
+              onChange={(e) => setSelectedIdx(Number(e.target.value))}
+              style={{
+                fontSize: 11,
+                border: '1px solid var(--border-strong)',
+                padding: '2px 6px',
+                background: 'var(--surface)',
+                color: 'var(--text)',
+              }}
+            >
+              {sheets.map((s, i) => (
+                <option key={i} value={i}>{s.label ?? `Sheet ${i + 1}`}</option>
+              ))}
+            </select>
           )}
-        </button>
 
-        {activePath && (
-          <a
-            href={activePath}
-            target="_blank"
-            rel="noreferrer"
-            style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}
-          >
-            ↗ New tab
-          </a>
-        )}
-      </div>
+          {activePath && (
+            <a
+              href={activePath}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}
+            >
+              ↗ New tab
+            </a>
+          )}
+        </div>
+      )}
 
-      {expanded && activePath && (
+      {activePath && (
         <iframe
           src={activePath}
           style={{ width: '100%', height: 520, border: 'none', display: 'block' }}

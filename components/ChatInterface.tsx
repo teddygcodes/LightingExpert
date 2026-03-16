@@ -152,6 +152,13 @@ export default function ChatInterface({ chatId }: Props) {
     router.push('/')
   }
 
+  const streamingMsgId =
+    isLoading &&
+    messages.length > 0 &&
+    messages[messages.length - 1].role === 'assistant'
+      ? messages[messages.length - 1].id
+      : null
+
   const followUpSuggestions = getFollowUpSuggestions(messages)
   const canSend = !isLoading && !!input.trim()
 
@@ -214,9 +221,22 @@ export default function ChatInterface({ chatId }: Props) {
             </div>
           )}
 
-          {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} onAddToSubmittal={handleAddToSubmittal} onSelectProduct={handleSelectProduct} />
-          ))}
+          {messages.map((msg, i) => {
+            // Suppress the spec sheet card when a search result already appeared in this
+            // exchange (either same message or a preceding step-message before the last user turn).
+            const suppressSpecSheet = (() => {
+              if (!msg.toolInvocations?.some((inv) => inv.toolName === 'get_spec_sheet')) return false
+              if (msg.toolInvocations?.some((inv) => inv.toolName === 'search_products' && inv.state === 'result')) return true
+              for (let j = i - 1; j >= 0; j--) {
+                if (messages[j].role === 'user') break
+                if (messages[j].toolInvocations?.some((inv) => inv.toolName === 'search_products' && inv.state === 'result')) return true
+              }
+              return false
+            })()
+            return (
+              <ChatMessage key={msg.id} message={msg} onAddToSubmittal={handleAddToSubmittal} onSelectProduct={handleSelectProduct} isStreaming={msg.id === streamingMsgId} suppressSpecSheet={suppressSpecSheet} />
+            )
+          })}
 
           {!isLoading && followUpSuggestions.length > 0 && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4, marginBottom: 20, paddingLeft: 2 }}>
