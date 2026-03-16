@@ -310,12 +310,17 @@ export const getSpecSheetTool = tool({
           specSheetPath: true,
           specSheets: true,
           productPageUrl: true,
+          configOptions: true,
           manufacturer: { select: { name: true } },
         },
       })
       if (!product) {
         return { error: `Product not found: "${catalogNumber}". Check the catalog number and try again.` }
       }
+      const matchType: 'exact_product_match' | 'family_spec_sheet_match' =
+        Array.isArray(product.configOptions) && (product.configOptions as unknown[]).length > 0
+          ? 'family_spec_sheet_match'
+          : 'exact_product_match'
       return {
         catalogNumber: product.catalogNumber,
         displayName: product.displayName,
@@ -323,6 +328,7 @@ export const getSpecSheetTool = tool({
         specSheetPath: product.specSheetPath,
         specSheets: product.specSheets,
         productPageUrl: product.productPageUrl,
+        matchType,
       }
     } catch (err) {
       return { error: `Spec sheet lookup failed: ${err instanceof Error ? err.message : 'Unknown error'}` }

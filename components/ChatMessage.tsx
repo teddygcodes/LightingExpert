@@ -65,13 +65,23 @@ function sanitizeContent(content: string, toolInvocations?: ToolInvocation[]): s
           !((inv as ToolInvocation & { state: 'result'; result: unknown }).result as Record<string, unknown>)?.error)
       )
   )
-  if (!hasProductCards) return content
+  const hasSpecSheetResult = toolInvocations.some(
+    (inv) =>
+      inv.toolName === 'get_spec_sheet' &&
+      inv.state === 'result' &&
+      !((inv as ToolInvocation & { state: 'result'; result: unknown }).result as Record<string, unknown>)?.error
+  )
+  if (!hasProductCards && !hasSpecSheetResult) return content
   const lines = content.split('\n')
   const out: string[] = []
   for (const line of lines) {
-    if (/^\s*\|/.test(line)) continue
-    if (/^[ \t]*[-*][ \t]+\*\*[A-Z][A-Z0-9][A-Z0-9\-_./ ]{0,28}\*\*/.test(line)) continue
-    if (/^[ \t]*\d+\.[ \t]+\*\*[A-Z][A-Z0-9][A-Z0-9\-_./ ]{0,28}\*\*/.test(line)) continue
+    if (hasProductCards) {
+      if (/^\s*\|/.test(line)) continue
+      if (/^[ \t]*[-*][ \t]+\*\*[A-Z][A-Z0-9][A-Z0-9\-_./ ]{0,28}\*\*/.test(line)) continue
+      if (/^[ \t]*\d+\.[ \t]+\*\*[A-Z][A-Z0-9][A-Z0-9\-_./ ]{0,28}\*\*/.test(line)) continue
+    }
+    // Strip markdown links when spec sheet is already rendered inline
+    if (hasSpecSheetResult && /\[.+\]\(.+\)/.test(line)) continue
     out.push(line)
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim()
@@ -312,6 +322,11 @@ function ToolResultRenderer({
     const r = result as SpecSheetToolResult
     return (
       <div style={{ marginTop: 6 }}>
+        {r.matchType === 'family_spec_sheet_match' && (
+          <div style={{ fontSize: 11, color: 'var(--text-faint)', fontStyle: 'italic', marginBottom: 4 }}>
+            Family spec sheet — exact configuration selected via ordering code
+          </div>
+        )}
         <SpecSheetPreview
           catalogNumber={r.catalogNumber}
           displayName={r.displayName}
