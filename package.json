@@ -6,21 +6,55 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "crawl": "ts-node --project tsconfig.scripts.json scripts/crawl.ts",
+    "crawl:acuity": "ts-node --project tsconfig.scripts.json scripts/crawl.ts --manufacturer=acuity",
+    "crawl:cooper": "ts-node --project tsconfig.scripts.json scripts/crawl.ts --manufacturer=cooper",
+    "backfill:acuity-pdfs": "ts-node --project tsconfig.scripts.json scripts/backfill-acuity-pdfs.ts",
+    "backfill:acuity-thumbs": "ts-node --project tsconfig.scripts.json scripts/backfill-acuity-thumbs.ts",
+    "backfill:cooper-thumbs": "ts-node --project tsconfig.scripts.json scripts/backfill-cooper-thumbs.ts",
+    "backfill:elite-thumbs": "ts-node --project tsconfig.scripts.json scripts/backfill-thumbnails.ts",
+    "crawl:current": "ts-node --project tsconfig.scripts.json scripts/crawl.ts -- --manufacturer=current",
+    "crawl:lutron": "ts-node --project tsconfig.scripts.json scripts/crawl.ts -- --manufacturer=lutron",
+    "backfill:current-thumbs": "ts-node --project tsconfig.scripts.json scripts/backfill-current-thumbs.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:push": "echo '⚠️  db:push can silently drop data. Use db:migrate instead. Run with FORCE=1 to bypass.' && [ \"$FORCE\" = '1' ] && prisma db push || exit 1",
+    "db:seed": "ts-node --esm --project tsconfig.scripts.json prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "npm run db:seed"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.58",
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@prisma/client": "^5.22.0",
+    "ai": "^6.0.116",
+    "cheerio": "^1.2.0",
+    "dotenv": "^17.3.1",
+    "lucide-react": "^0.577.0",
     "next": "16.1.6",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^4.10.38",
+    "playwright": "^1.58.2",
+    "prisma": "^5.22.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }
