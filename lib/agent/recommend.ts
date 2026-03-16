@@ -281,24 +281,33 @@ const FIXTURE_CLASS_SIGNALS: Partial<Record<string, { positive: string[]; negati
 }
 
 // Returns a fixture-class match result for a product against a requested type.
-// Uses canonicalFixtureType first (authoritative); falls back to text signals.
+// Negative text signals are checked FIRST and can veto even a canonical type match,
+// because the classification pipeline can misclassify products (e.g. LBK light bar
+// kits miscategorised as TROFFER). Positive signals and canonical type are consulted
+// only after the negative veto passes.
 // Text basis: displayName + familyName + catalogNumber.
 export function inferFixtureClass(product: SearchProductRow, requestedType: string): ClassMatchResult {
-  // 1. Canonical type present — authoritative
+  const signals = FIXTURE_CLASS_SIGNALS[requestedType]
+
+  // 1. Negative text signals win over everything — including canonical type
+  if (signals) {
+    const text = [product.displayName, product.familyName, product.catalogNumber]
+      .filter(Boolean).join(' ').toLowerCase()
+    if (signals.negative.some(s => text.includes(s))) return 'excluded'
+  }
+
+  // 2. Canonical type present (and not vetoed by negative signals) — authoritative
   if (product.canonicalFixtureType != null) {
     return (product.canonicalFixtureType as string) === requestedType ? 'confirmed' : 'excluded'
   }
 
-  // 2. No canonical type — use text signals
-  const signals = FIXTURE_CLASS_SIGNALS[requestedType]
-  if (!signals) return 'unknown'  // no signals defined for this type — don't exclude
+  // 3. No canonical type — use positive text signals
+  if (signals) {
+    const text = [product.displayName, product.familyName, product.catalogNumber]
+      .filter(Boolean).join(' ').toLowerCase()
+    if (signals.positive.some(s => text.includes(s))) return 'inferred_match'
+  }
 
-  const text = [product.displayName, product.familyName, product.catalogNumber]
-    .filter(Boolean).join(' ').toLowerCase()
-
-  // Negative wins over positive
-  if (signals.negative.some(s => text.includes(s))) return 'excluded'
-  if (signals.positive.some(s => text.includes(s))) return 'inferred_match'
   return 'unknown'
 }
 
