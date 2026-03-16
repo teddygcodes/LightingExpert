@@ -27,10 +27,10 @@
     "seed": "npm run db:seed"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.58",
+    "@ai-sdk/anthropic": "^0.0.56",
     "@anthropic-ai/sdk": "^0.78.0",
     "@prisma/client": "^5.22.0",
-    "ai": "^6.0.116",
+    "ai": "^4.3.19",
     "cheerio": "^1.2.0",
     "dotenv": "^17.3.1",
     "lucide-react": "^0.577.0",
