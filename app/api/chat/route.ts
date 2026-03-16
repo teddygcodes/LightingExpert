@@ -41,6 +41,9 @@ export async function POST(req: NextRequest) {
     messages,
     maxTokens: 8192,
     maxSteps: 5,
+    onError: (err) => {
+      console.error('[chat route] streamText error:', err)
+    },
   })
 
   return result.toDataStreamResponse()
