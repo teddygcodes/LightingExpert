@@ -16,6 +16,8 @@ interface Props {
   message: Message
   onAddToSubmittal?: (catalogNumber: string) => void
   onSelectProduct?: (catalogNumber: string) => void
+  isStreaming?: boolean
+  suppressSpecSheet?: boolean
 }
 
 function ToolLoadingIndicator({ toolName }: { toolName: string }) {
@@ -93,12 +95,16 @@ function ToolResultRenderer({
   onSelectProduct,
   allInvocations,
   messageContent,
+  isStreaming,
+  suppressSpecSheet,
 }: {
   invocation: ToolInvocation & { state: 'result' }
   onAddToSubmittal?: (catalogNumber: string) => void
   onSelectProduct?: (catalogNumber: string) => void
   allInvocations: ToolInvocation[]
   messageContent: string
+  isStreaming?: boolean
+  suppressSpecSheet?: boolean
 }) {
   const { toolName, result } = invocation as ToolInvocation & { state: 'result'; result: unknown }
 
@@ -130,9 +136,10 @@ function ToolResultRenderer({
       if (hasSuccessfulSibling) return null
       return <div style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic', padding: '4px 0' }}>No products found matching those criteria.</div>
     }
-    const isThisDisambig =
-      r.total >= 2 && r.total <= 8 &&
-      /which|pick\s+one|select\s+one/i.test(messageContent)
+    // During streaming, messageContent is incomplete — default small result sets to compact
+    // disambiguation view to avoid flashing from full cards to compact table mid-stream.
+    const disambigText = /which|pick\s+one|select\s+one/i.test(messageContent)
+    const isThisDisambig = r.total >= 2 && r.total <= 8 && (isStreaming || disambigText)
 
     // If any sibling search_products in this message is a disambiguation block,
     // suppress this one (it was a broad exploratory search, not the final result).
@@ -140,10 +147,7 @@ function ToolResultRenderer({
       if (other.toolCallId === invocation.toolCallId) return false
       if (other.toolName !== 'search_products' || other.state !== 'result') return false
       const o = (other as ToolInvocation & { state: 'result'; result: unknown }).result as SearchProductsToolResult
-      return (
-        o?.total >= 2 && o?.total <= 8 &&
-        /which|pick\s+one|select\s+one/i.test(messageContent)
-      )
+      return o?.total >= 2 && o?.total <= 8 && (isStreaming || disambigText)
     })
     if (anyOtherDisambig && !isThisDisambig) return null
 
@@ -319,21 +323,91 @@ function ToolResultRenderer({
   }
 
   if (toolName === 'get_spec_sheet') {
+    // Suppress when a search result was already shown in this exchange.
+    // The flag is computed in ChatInterface across all messages in the conversation.
+    if (suppressSpecSheet) return null
+
     const r = result as SpecSheetToolResult
+    const manufacturerSlug = r.manufacturer.toLowerCase().replace(/\s+/g, '-')
+    const thumbnailUrl = `/thumbnails/${manufacturerSlug}/${encodeURIComponent(r.catalogNumber)}.png`
     return (
-      <div style={{ marginTop: 6 }}>
-        {r.matchType === 'family_spec_sheet_match' && (
-          <div style={{ fontSize: 11, color: 'var(--text-faint)', fontStyle: 'italic', marginBottom: 4 }}>
-            Family spec sheet — exact configuration selected via ordering code
+      <div style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderLeft: '3px solid var(--accent)',
+        marginTop: 6,
+        overflow: 'hidden',
+        fontSize: 13,
+      }}>
+        {/* Product header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+          <div style={{
+            width: 72,
+            height: 72,
+            flexShrink: 0,
+            background: 'var(--bg)',
+            borderRight: '1px solid var(--border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+          }}>
+            <img
+              src={thumbnailUrl}
+              alt={r.catalogNumber}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
           </div>
-        )}
-        <SpecSheetPreview
-          catalogNumber={r.catalogNumber}
-          displayName={r.displayName}
-          specSheetPath={r.specSheetPath}
-          specSheets={r.specSheets}
-          productPageUrl={r.productPageUrl}
-        />
+          <div style={{ flex: 1, minWidth: 0, padding: '10px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.02em', color: 'var(--text)' }}>
+                {r.catalogNumber}
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {r.manufacturer}
+              </span>
+            </div>
+            {r.displayName && (
+              <div style={{ color: 'var(--text-secondary)', marginTop: 2, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {r.displayName}
+              </div>
+            )}
+            {r.matchType === 'family_spec_sheet_match' && (
+              <div style={{ fontSize: 11, color: 'var(--text-faint)', fontStyle: 'italic', marginTop: 4 }}>
+                Family spec sheet — exact configuration selected via ordering code
+              </div>
+            )}
+            <div style={{ marginTop: 10 }}>
+              {onAddToSubmittal && (
+                <button
+                  onClick={() => onAddToSubmittal(r.catalogNumber)}
+                  style={{
+                    fontSize: 12,
+                    padding: '4px 11px',
+                    background: 'var(--accent)',
+                    color: '#fff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                  }}
+                >
+                  + Submittal
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        {/* Spec sheet inline */}
+        <div style={{ borderTop: '1px solid var(--border)' }}>
+          <SpecSheetPreview
+            catalogNumber={r.catalogNumber}
+            displayName={r.displayName}
+            specSheetPath={r.specSheetPath}
+            specSheets={r.specSheets}
+            productPageUrl={r.productPageUrl}
+          />
+        </div>
       </div>
     )
   }
@@ -366,50 +440,50 @@ function ToolResultRenderer({
 }
 
 const markdownComponents = {
-  p: ({ children }: { children: React.ReactNode }) => (
+  p: ({ children }: { children?: React.ReactNode }) => (
     <p style={{ margin: '0 0 8px', color: 'var(--text)', lineHeight: 1.65 }}>{children}</p>
   ),
-  ul: ({ children }: { children: React.ReactNode }) => (
+  ul: ({ children }: { children?: React.ReactNode }) => (
     <ul style={{ margin: '4px 0 8px', paddingLeft: 18 }}>{children}</ul>
   ),
-  ol: ({ children }: { children: React.ReactNode }) => (
+  ol: ({ children }: { children?: React.ReactNode }) => (
     <ol style={{ margin: '4px 0 8px', paddingLeft: 18 }}>{children}</ol>
   ),
-  li: ({ children }: { children: React.ReactNode }) => (
+  li: ({ children }: { children?: React.ReactNode }) => (
     <li style={{ marginBottom: 3, color: 'var(--text-secondary)' }}>{children}</li>
   ),
-  strong: ({ children }: { children: React.ReactNode }) => (
+  strong: ({ children }: { children?: React.ReactNode }) => (
     <strong style={{ fontWeight: 600, color: 'var(--text)' }}>{children}</strong>
   ),
-  code: ({ children }: { children: React.ReactNode }) => (
+  code: ({ children }: { children?: React.ReactNode }) => (
     <code style={{ fontFamily: 'monospace', background: 'var(--bg)', border: '1px solid var(--border)', padding: '1px 5px', fontSize: 12 }}>
       {children}
     </code>
   ),
-  h3: ({ children }: { children: React.ReactNode }) => (
+  h3: ({ children }: { children?: React.ReactNode }) => (
     <h3 style={{ fontSize: 13, fontWeight: 700, margin: '10px 0 4px', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{children}</h3>
   ),
-  table: ({ children }: { children: React.ReactNode }) => (
+  table: ({ children }: { children?: React.ReactNode }) => (
     <div style={{ overflowX: 'auto', margin: '8px 0' }}>
       <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>{children}</table>
     </div>
   ),
-  thead: ({ children }: { children: React.ReactNode }) => (
+  thead: ({ children }: { children?: React.ReactNode }) => (
     <thead style={{ background: 'var(--bg)', borderBottom: '2px solid var(--border)' }}>{children}</thead>
   ),
-  th: ({ children }: { children: React.ReactNode }) => (
+  th: ({ children }: { children?: React.ReactNode }) => (
     <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{children}</th>
   ),
-  td: ({ children }: { children: React.ReactNode }) => (
+  td: ({ children }: { children?: React.ReactNode }) => (
     <td style={{ padding: '6px 12px', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', verticalAlign: 'top' }}>{children}</td>
   ),
-  tr: ({ children }: { children: React.ReactNode }) => (
+  tr: ({ children }: { children?: React.ReactNode }) => (
     <tr style={{ transition: 'background 0.1s' }}>{children}</tr>
   ),
   hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '12px 0' }} />,
 }
 
-export default function ChatMessage({ message, onAddToSubmittal, onSelectProduct }: Props) {
+export default function ChatMessage({ message, onAddToSubmittal, onSelectProduct, isStreaming, suppressSpecSheet }: Props) {
   const isUser = message.role === 'user'
 
   if (isUser) {
@@ -442,8 +516,18 @@ export default function ChatMessage({ message, onAddToSubmittal, onSelectProduct
         minWidth: 0,
         fontSize: 14,
       }}>
-        {message.content && (
-          <div style={{ marginBottom: message.toolInvocations?.length ? 10 : 0 }}>
+        {/* During streaming: show dots (hides pre-tool planning text — we can't know yet if tools are coming).
+            After streaming: show content only for tool-free messages (tool messages' content is pre-tool text).
+            Content fades in with msg-animate when streaming completes. */}
+        {isStreaming && !message.toolInvocations?.length && (
+          <div style={{ display: 'flex', gap: 4, padding: '2px 0 4px' }}>
+            <span className="dot-1" style={{ width: 5, height: 5, background: 'var(--accent)', display: 'inline-block' }} />
+            <span className="dot-2" style={{ width: 5, height: 5, background: 'var(--accent)', display: 'inline-block' }} />
+            <span className="dot-3" style={{ width: 5, height: 5, background: 'var(--accent)', display: 'inline-block' }} />
+          </div>
+        )}
+        {!isStreaming && !message.toolInvocations?.length && message.content && (
+          <div className="msg-animate">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
               {sanitizeContent(message.content, message.toolInvocations)}
             </ReactMarkdown>
@@ -461,6 +545,8 @@ export default function ChatMessage({ message, onAddToSubmittal, onSelectProduct
                 onSelectProduct={onSelectProduct}
                 allInvocations={message.toolInvocations ?? []}
                 messageContent={message.content ?? ''}
+                isStreaming={isStreaming}
+                suppressSpecSheet={suppressSpecSheet}
               />
             )}
           </div>

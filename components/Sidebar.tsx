@@ -214,10 +214,14 @@ export default function Sidebar() {
   }
 
   const handleDelete = async (chatId: string) => {
-    await fetch(`/api/chats/${chatId}`, { method: 'DELETE' })
-    loadData()
-    // If we deleted the active chat, go home
-    if (pathname === `/chat/${chatId}`) router.push('/')
+    try {
+      const res = await fetch(`/api/chats/${chatId}`, { method: 'DELETE' })
+      if (!res.ok) return
+      loadData()
+      if (pathname === `/chat/${chatId}`) router.push('/')
+    } catch {
+      // network error during delete — silently ignore, chat stays in sidebar
+    }
   }
 
   const handleCreateProject = async () => {
@@ -241,9 +245,6 @@ export default function Sidebar() {
       return next
     })
   }
-
-  // Flatten all project chats for the ChatRow inside projects
-  const allChats = [...chats, ...projects.flatMap((p) => p.chats)]
 
   const activeChatId = pathname.startsWith('/chat/') ? pathname.split('/')[2] : null
   const isOnNewChat = pathname === '/' && !activeChatId
