@@ -10,6 +10,7 @@ import type {
   CrossReferenceToolResult,
   SpecSheetToolResult,
   AddToSubmittalToolResult,
+  RecommendFixturesToolResult,
 } from '@/lib/agent/types'
 
 interface Props {
@@ -64,7 +65,9 @@ function sanitizeContent(content: string, toolInvocations?: ToolInvocation[]): s
         (inv.toolName === 'search_products' &&
           ((inv as ToolInvocation & { state: 'result'; result: unknown }).result as SearchProductsToolResult)?.total > 0) ||
         (inv.toolName === 'cross_reference' &&
-          !((inv as ToolInvocation & { state: 'result'; result: unknown }).result as Record<string, unknown>)?.error)
+          !((inv as ToolInvocation & { state: 'result'; result: unknown }).result as Record<string, unknown>)?.error) ||
+        (inv.toolName === 'recommend_fixtures' &&
+          ((inv as ToolInvocation & { state: 'result'; result: unknown }).result as RecommendFixturesToolResult)?.recommendations?.length > 0)
       )
   )
   const hasSpecSheetResult = toolInvocations.some(
@@ -432,6 +435,81 @@ function ToolResultRenderer({
           </a>
           {r.wasNewSubmittal && <span style={{ color: 'var(--text-muted)', fontSize: 12 }}> (new)</span>}
         </span>
+      </div>
+    )
+  }
+
+  if (toolName === 'recommend_fixtures') {
+    const r = result as RecommendFixturesToolResult
+    if (!r.recommendations?.length) {
+      return <div style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic', padding: '4px 0' }}>No recommendations found.</div>
+    }
+
+    const rankColors: Record<string, string> = {
+      'Top pick': 'var(--accent)',
+      'Strong alternative': '#15803d',
+      'Also consider': 'var(--text-muted)',
+    }
+
+    return (
+      <div style={{ marginTop: 6 }}>
+        {r.recommendations.map((rec, i) => {
+          const rankColor = rankColors[rec.rankLabel] ?? 'var(--text-muted)'
+          const lowConfidence = rec.fitConfidence < 0.6
+          return (
+            <div key={rec.id} style={{ marginBottom: i < r.recommendations.length - 1 ? 12 : 4 }}>
+              {/* Rank header */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 8,
+                padding: '4px 0 6px',
+                flexWrap: 'wrap',
+              }}>
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: rankColor,
+                  flexShrink: 0,
+                }}>
+                  ▶ {rec.rankLabel}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>
+                  {rec.whyRecommended}
+                  {lowConfidence && (
+                    <span style={{ color: 'var(--text-faint)', fontStyle: 'italic' }}> (limited spec data)</span>
+                  )}
+                </span>
+              </div>
+              {/* Product card */}
+              <ProductInlineCard
+                product={rec}
+                onAddToSubmittal={onAddToSubmittal}
+              />
+              {/* Tradeoffs */}
+              {rec.tradeoffs && (
+                <div style={{
+                  fontSize: 11,
+                  color: 'var(--text-faint)',
+                  fontStyle: 'italic',
+                  padding: '4px 2px 0',
+                }}>
+                  {rec.tradeoffs}
+                </div>
+              )}
+            </div>
+          )
+        })}
+        {/* Footer */}
+        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          <span>Ranked for {r.context.applicationType}</span>
+          <span>·</span>
+          <span>{r.context.projectPosture.replace(/_/g, ' ')}</span>
+          <span>·</span>
+          <span>{r.evaluatedCount} candidates evaluated</span>
+        </div>
       </div>
     )
   }

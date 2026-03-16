@@ -1,5 +1,5 @@
 // lib/agent/tools.ts
-// All 4 chat agent tools: search_products, cross_reference, get_spec_sheet, add_to_submittal.
+// All 5 chat agent tools: search_products, cross_reference, get_spec_sheet, add_to_submittal, recommend_fixtures.
 
 import { tool } from 'ai'
 import { z } from 'zod'
@@ -7,6 +7,7 @@ import { prisma } from '@/lib/db'
 import { searchProducts } from '@/lib/products-search'
 import { findMatches } from '@/lib/cross-reference'
 import type { ComparisonSnapshot } from '@/lib/types'
+import { buildRecommendationContext, rankCandidates } from '@/lib/agent/recommend'
 
 // ─── Helper: derive human-readable differences from comparisonSnapshot ─────────
 
@@ -125,6 +126,36 @@ const addToSubmittalSchema = z.object({
   submittalId: z.string().optional().describe(
     'ID of existing submittal to add to. If omitted, uses the most recent DRAFT submittal or creates a new one.'
   ),
+})
+
+const FIXTURE_TYPE_VALUES = [
+  'HIGH_BAY', 'LOW_BAY', 'TROFFER', 'FLAT_PANEL', 'DOWNLIGHT', 'RECESSED_CAN',
+  'CYLINDER', 'VAPOR_TIGHT', 'WALL_PACK', 'WALL_MOUNT', 'SCONCE', 'FLOOD',
+  'AREA_SITE', 'ROADWAY', 'CANOPY', 'GARAGE', 'LINEAR_SUSPENDED', 'LINEAR_SURFACE',
+  'LINEAR_SLOT', 'STRIP', 'WRAP', 'PENDANT', 'SURFACE_MOUNT', 'TRACK', 'BOLLARD',
+  'LANDSCAPE', 'POST_TOP', 'STEP_LIGHT', 'UNDER_CABINET', 'EXIT_EMERGENCY',
+  'VANITY', 'COVE', 'RETROFIT_KIT', 'CONTROLS', 'SENSOR', 'DRIVER', 'POWER_SUPPLY',
+  'MODULAR_WIRING', 'POLE', 'ARM_BRACKET', 'ACCESSORY', 'SPORTS_LIGHTING', 'UV_C',
+  'SURGICAL', 'CLEANROOM', 'VANDAL_RESISTANT', 'BEHAVIORAL', 'DECORATIVE', 'OTHER',
+] as const
+
+const recommendFixturesSchema = z.object({
+  applicationType: z.string().describe(
+    'Space or application type: classroom, office, warehouse, retail, healthcare, renovation, school, private_school, etc.'
+  ),
+  budgetSensitivity: z.enum(['value', 'standard', 'premium']).optional().describe(
+    "value = budget-sensitive/contractor posture; standard = typical commercial (default); premium = design-forward/architectural intent. Omit to use application-type defaults."
+  ),
+  fixtureType: z.enum(FIXTURE_TYPE_VALUES).optional().describe(
+    'Canonical fixture type. E.g. TROFFER for 2x4/2x2 troffers, HIGH_BAY for warehouse, DOWNLIGHT for recessed.'
+  ),
+  minLumens: z.number().optional(),
+  maxWattage: z.number().optional(),
+  preferredCct: z.number().optional().describe('Preferred CCT in Kelvin, e.g. 3500 or 4000'),
+  minCri: z.number().optional(),
+  dlcRequired: z.boolean().optional().describe('If true, only DLC-listed products are considered'),
+  wetLocation: z.boolean().optional(),
+  limit: z.number().optional().describe('Top N results to return. Default 3, max 5.'),
 })
 
 // ─── Tool 1: search_products ──────────────────────────────────────────────────
@@ -429,6 +460,85 @@ export const addToSubmittalTool = tool({
   },
 })
 
+// ─── Tool 5: recommend_fixtures ───────────────────────────────────────────────
+
+export const recommendFixturesTool = tool({
+  description:
+    'Recommend the best-fit fixtures for a specific application and project context. Use this (NOT search_products) when the user asks "what\'s good for X", "recommend a fixture for Y", "what should I use in Z", or similar advisory questions. The tool infers application defaults (CCT, CRI, DLC, posture) and scores candidates by fit — not just keyword match.',
+  parameters: recommendFixturesSchema,
+  execute: async (params: z.infer<typeof recommendFixturesSchema>) => {
+    try {
+      const ctx = buildRecommendationContext({
+        applicationType: params.applicationType,
+        budgetSensitivity: params.budgetSensitivity,
+        minLumens: params.minLumens,
+        maxWattage: params.maxWattage,
+        preferredCct: params.preferredCct,
+        minCri: params.minCri,
+      })
+
+      // Focused candidate search — indoor, fixture type, DLC preference, CRI tolerance
+      const candidates = await searchProducts({
+        fixtureType: params.fixtureType,
+        environment: ctx.indoorPreferred ? 'indoor' : undefined,
+        minCri: ctx.minCri > 5 ? ctx.minCri - 5 : undefined,  // slight tolerance
+        dlcListed: ctx.dlcPreferred && params.dlcRequired !== false ? true : undefined,
+        wetLocation: params.wetLocation,
+        limit: 50,  // internal — allows scoring across full pool
+      })
+
+      if (candidates.length === 0) {
+        // Retry without some filters if no results
+        const retry = await searchProducts({
+          fixtureType: params.fixtureType,
+          limit: 50,
+        })
+        if (retry.length === 0) {
+          return { error: `No products found for fixture type ${params.fixtureType ?? 'unspecified'}.` }
+        }
+        const ranked = rankCandidates(retry, ctx, Math.min(params.limit ?? 3, 5))
+        return {
+          recommendations: ranked.map(c => ({
+            ...c.product,
+            score: c.score,
+            fitConfidence: c.fitConfidence,
+            rankLabel: c.rankLabel,
+            whyRecommended: c.whyRecommended,
+            tradeoffs: c.tradeoffs,
+          })),
+          context: {
+            applicationType: params.applicationType,
+            projectPosture: ctx.projectPosture,
+            inferredDefaults: ctx.inferredDefaultsDescription,
+          },
+          evaluatedCount: retry.length,
+        }
+      }
+
+      const ranked = rankCandidates(candidates, ctx, Math.min(params.limit ?? 3, 5))
+
+      return {
+        recommendations: ranked.map(c => ({
+          ...c.product,
+          score: c.score,
+          fitConfidence: c.fitConfidence,
+          rankLabel: c.rankLabel,
+          whyRecommended: c.whyRecommended,
+          tradeoffs: c.tradeoffs,
+        })),
+        context: {
+          applicationType: params.applicationType,
+          projectPosture: ctx.projectPosture,
+          inferredDefaults: ctx.inferredDefaultsDescription,
+        },
+        evaluatedCount: candidates.length,
+      }
+    } catch (err) {
+      return { error: `Recommendation failed: ${err instanceof Error ? err.message : 'Unknown error'}` }
+    }
+  },
+})
+
 // ─── Export all tools ──────────────────────────────────────────────────────────
 
 export const agentTools = {
@@ -436,4 +546,5 @@ export const agentTools = {
   cross_reference: crossReferenceTool,
   get_spec_sheet: getSpecSheetTool,
   add_to_submittal: addToSubmittalTool,
+  recommend_fixtures: recommendFixturesTool,
 }

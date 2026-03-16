@@ -69,7 +69,7 @@ const PRODUCT_SELECT = {
 export type SearchProductRow = Prisma.ProductGetPayload<{ select: typeof PRODUCT_SELECT }>
 
 export async function searchProducts(params: SearchProductsParams): Promise<SearchProductRow[]> {
-  const limit = Math.min(params.limit ?? 10, 20)
+  const limit = Math.min(params.limit ?? 10, 50)
   const where: Prisma.ProductWhereInput = { isActive: true }
 
   // Manufacturer filter (by slug)

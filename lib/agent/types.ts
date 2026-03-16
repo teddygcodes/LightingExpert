@@ -1,7 +1,7 @@
 // lib/agent/types.ts
 // Shared TypeScript types for the chat agent tools.
 
-export type ToolName = 'search_products' | 'cross_reference' | 'get_spec_sheet' | 'add_to_submittal'
+export type ToolName = 'search_products' | 'cross_reference' | 'get_spec_sheet' | 'add_to_submittal' | 'recommend_fixtures'
 
 // ─── Tool Inputs ──────────────────────────────────────────────────────────────
 
@@ -125,4 +125,25 @@ export type AnyToolResult =
   | CrossReferenceToolResult
   | SpecSheetToolResult
   | AddToSubmittalToolResult
+  | RecommendFixturesToolResult
   | ToolErrorResult
+
+// ─── Recommend Fixtures Tool ──────────────────────────────────────────────────
+
+export interface ProductRecommendation extends ProductSearchResult {
+  score: number
+  fitConfidence: number
+  rankLabel: string
+  whyRecommended: string
+  tradeoffs?: string
+}
+
+export interface RecommendFixturesToolResult {
+  recommendations: ProductRecommendation[]
+  context: {
+    applicationType: string
+    projectPosture: 'value_engineered' | 'standard_commercial' | 'premium_design' | 'specialty_controls'
+    inferredDefaults: string[]
+  }
+  evaluatedCount: number
+}
