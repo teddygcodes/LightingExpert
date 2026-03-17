@@ -166,8 +166,7 @@ function downloadImageBuffer(url: string, redirects = 0): Promise<Buffer | null>
 // ─── CS Category Discovery ────────────────────────────────────────────────────
 
 async function discoverCSCategoryPages(
-  context: BrowserContext,
-  rootCategoriesToCrawl: string[]
+  context: BrowserContext
 ): Promise<Array<{ slug: string; name: string; url: string }>> {
   const page = await context.newPage()
   const results: Array<{ slug: string; name: string; url: string }> = []
@@ -776,7 +775,7 @@ export async function crawlAcuityCS(
     const allEntries: AcuityCSCrawlEntry[] = []
     const seenUrls = new Set<string>()
 
-    const categories = await discoverCSCategoryPages(context, rootCategoriesToCrawl)
+    const categories = await discoverCSCategoryPages(context)
 
     if (categories.length === 0) {
       console.warn('[AcuityCS] No category pages discovered — check CS landing page structure')
