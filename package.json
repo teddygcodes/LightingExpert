@@ -23,7 +23,9 @@
     "db:seed": "ts-node --esm --project tsconfig.scripts.json prisma/seed.ts",
     "db:studio": "prisma studio",
     "classify": "ts-node --project tsconfig.scripts.json scripts/classify-fixtures.ts",
-    "classify:ai": "ts-node --project tsconfig.scripts.json scripts/classify-fixtures-ai.ts"
+    "classify:ai": "ts-node --project tsconfig.scripts.json scripts/classify-fixtures-ai.ts",
+    "extract-specs": "ts-node --project tsconfig.scripts.json scripts/extract-specs-from-pdfs.ts",
+    "promote-specs": "ts-node --project tsconfig.scripts.json scripts/promote-extractions.ts"
   },
   "prisma": {
     "seed": "npm run db:seed"
