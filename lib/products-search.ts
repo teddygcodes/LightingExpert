@@ -197,6 +197,56 @@ export async function searchProducts(params: SearchProductsParams): Promise<Sear
         return sorted
       }
     } catch {
+      // fall through to fuzzy query
+    }
+
+    // Fuzzy fallback — handles typos like "stak" → "STACK" via pg_trgm word_similarity
+    // Only runs when tsvector returns 0 results (i.e. query has no real English word match)
+    try {
+      const STOP_WORDS = new Set(['the','a','an','for','of','in','on','with','and','or','to','is','it','at','by','from'])
+      const significantTokens = tokens.filter(t => t.length >= 3 && !STOP_WORDS.has(t.toLowerCase()))
+      if (significantTokens.length > 0) {
+        // Build manufacturer filter condition for the raw query
+        const mfrFilter = params.manufacturerSlug
+          ? Prisma.sql`AND m.slug = ${params.manufacturerSlug}`
+          : Prisma.sql``
+        const catFilter = where.categoryId && typeof where.categoryId === 'object' && 'in' in where.categoryId
+          ? Prisma.sql`AND p."categoryId" = ANY(${(where.categoryId as { in: string[] }).in}::text[])`
+          : Prisma.sql``
+
+        for (const token of significantTokens) {
+          const rows = await prisma.$queryRaw<{ id: string; score: number }[]>`
+            SELECT p.id,
+              GREATEST(
+                word_similarity(${token}, p."displayName"),
+                word_similarity(${token}, COALESCE(p."familyName", ''))
+              ) AS score
+            FROM "Product" p
+            JOIN "Manufacturer" m ON m.id = p."manufacturerId"
+            WHERE p."isActive" = true
+              ${mfrFilter}
+              ${catFilter}
+              AND GREATEST(
+                word_similarity(${token}, p."displayName"),
+                word_similarity(${token}, COALESCE(p."familyName", ''))
+              ) > 0.4
+            ORDER BY
+              similarity(${token}, p."displayName") DESC,
+              score DESC,
+              LENGTH(p."displayName") ASC
+            LIMIT ${Prisma.raw(String(limit))}
+          `
+          if (rows.length > 0) {
+            const ids = rows.map((r) => r.id)
+            const products = await prisma.product.findMany({
+              where: { id: { in: ids } },
+              select: PRODUCT_SELECT,
+            })
+            return ids.map((id) => products.find((p) => p.id === id)).filter(Boolean) as SearchProductRow[]
+          }
+        }
+      }
+    } catch {
       // fall through to structured query
     }
   }
