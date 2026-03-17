@@ -132,7 +132,42 @@ async function main() {
     })
   }
 
-  console.log('Seeded 5 manufacturers: 2 Elite, 8 Acuity, 3 Cooper, 3 Current Lighting, and 2 Lutron top-level categories.')
+  // ─── Acuity Contractor Select — 11 top-level browse categories ───────────────
+  await prisma.manufacturer.upsert({
+    where: { slug: 'acuity-cs' },
+    update: { name: 'Acuity Contractor Select' },
+    create: {
+      name: 'Acuity Contractor Select',
+      slug: 'acuity-cs',
+      website: 'https://www.acuitybrands.com/resources/programs/contractor-select',
+    },
+  })
+  const acuityCS = await prisma.manufacturer.findUniqueOrThrow({ where: { slug: 'acuity-cs' } })
+
+  const ACUITY_CS_ROOT_CATEGORIES = [
+    { name: 'Downlights',                      slug: 'downlights' },
+    { name: 'Panels, Troffers & Wraparounds',  slug: 'panels-troffers-wraparounds' },
+    { name: 'Highbay & Strip Lights',          slug: 'highbay-strip' },
+    { name: 'Outdoor',                         slug: 'outdoor' },
+    { name: 'Controls',                        slug: 'controls' },
+    { name: 'Emergency & Exit',                slug: 'emergency-exit' },
+    { name: 'Programmable LED Drivers',        slug: 'programmable-drivers' },
+    { name: 'Surface / Flush Mount',           slug: 'surface-flush-mount' },
+    { name: 'Switchable',                      slug: 'switchable' },
+    { name: 'Undercabinet',                    slug: 'undercabinet' },
+    { name: 'Vanities',                        slug: 'vanities' },
+  ]
+
+  for (let i = 0; i < ACUITY_CS_ROOT_CATEGORIES.length; i++) {
+    const { name, slug } = ACUITY_CS_ROOT_CATEGORIES[i]
+    await prisma.category.upsert({
+      where: { manufacturerId_path: { manufacturerId: acuityCS.id, path: slug } },
+      update: { name, sortOrder: i },
+      create: { manufacturerId: acuityCS.id, name, slug, path: slug, sortOrder: i },
+    })
+  }
+
+  console.log('Seeded 6 manufacturers: 2 Elite, 8 Acuity, 3 Cooper, 3 Current Lighting, 2 Lutron, and 11 Acuity Contractor Select top-level categories.')
 }
 
 main()
