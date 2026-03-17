@@ -17,7 +17,22 @@ import type { CrawlEvidence, FieldProvenanceMap } from '../types'
 import fs from 'fs'
 
 const BASE_URL = 'https://www.acuitybrands.com'
-const CS_LANDING_URL = 'https://www.acuitybrands.com/resources/programs/contractor-select'
+
+// Hardcoded CS category URLs — verified directly from the CS landing page iframe.
+// Each entry is the top-level category page; sub-pages within each are discovered dynamically.
+// Programmable LED Drivers (→ external FieldSET site) and Undercabinet (→ single product detail)
+// are excluded as they have no standard Coveo product listing pages.
+const CS_CATEGORY_MAP: Array<{ slug: string; name: string; url: string }> = [
+  { slug: 'controls',                    name: 'Controls',                      url: `${BASE_URL}/resources/programs/contractor-select/controls` },
+  { slug: 'downlights',                  name: 'Downlights',                    url: `${BASE_URL}/resources/programs/contractor-select/downlights` },
+  { slug: 'emergency-exit',              name: 'Emergency & Exit',              url: `${BASE_URL}/resources/programs/contractor-select/emergency-exit` },
+  { slug: 'panels-troffers-wraparounds', name: 'Panels, Troffers & Wraparounds', url: `${BASE_URL}/resources/programs/contractor-select/flatpanel-troffer` },
+  { slug: 'highbay-strip',               name: 'Highbay & Strip Lights',        url: `${BASE_URL}/resources/programs/contractor-select/highbay-striplights` },
+  { slug: 'outdoor',                     name: 'Outdoor',                       url: `${BASE_URL}/resources/programs/contractor-select/outdoor` },
+  { slug: 'surface-flush-mount',         name: 'Surface / Flush Mount',         url: `${BASE_URL}/resources/programs/contractor-select/flush-surface-mount` },
+  { slug: 'switchable',                  name: 'Switchable',                    url: `${BASE_URL}/resources/programs/contractor-select/switchable` },
+  { slug: 'vanities',                    name: 'Vanities',                      url: `${BASE_URL}/resources/programs/contractor-select/vanity-lighting` },
+]
 
 export const ACUITY_CS_ROOT_CATEGORY_PATHS: Record<string, string> = {
   'contractor-select': 'contractor-select',
@@ -163,78 +178,58 @@ function downloadImageBuffer(url: string, redirects = 0): Promise<Buffer | null>
   })
 }
 
-// ─── CS Category Discovery ────────────────────────────────────────────────────
+// ─── CS Sub-Page Discovery ────────────────────────────────────────────────────
 
-async function discoverCSCategoryPages(
-  context: BrowserContext
-): Promise<Array<{ slug: string; name: string; url: string }>> {
-  const page = await context.newPage()
-  const results: Array<{ slug: string; name: string; url: string }> = []
-
+// Each CS category page (e.g. /contractor-select/downlights) contains tiles that
+// link to Coveo product listing sub-pages (e.g. /contractor-select/downlights/canless).
+// This function navigates a category page and returns all its sub-page URLs.
+async function discoverCSSubPages(
+  page: Page,
+  categoryUrl: string,
+  categorySlug: string
+): Promise<string[]> {
   try {
-    console.log(`[AcuityCS] Loading CS landing page: ${CS_LANDING_URL}`)
-    await page.goto(CS_LANDING_URL, { waitUntil: 'load', timeout: 45000 })
+    await page.goto(categoryUrl, { waitUntil: 'load', timeout: 45000 })
     await dismissCookieBanner(page)
-    await page.waitForSelector('a[href*="/products/"]', { timeout: 15000 }).catch(() => {})
-    await delay(4000)
+    await delay(3000)
 
-    const links = await page.evaluate(() => {
+    // Map our DB slugs back to Acuity's URL path segment
+    const SLUG_TO_CS_PATH: Record<string, string> = {
+      'panels-troffers-wraparounds': 'flatpanel-troffer',
+      'surface-flush-mount':         'flush-surface-mount',
+      'highbay-strip':               'highbay-striplights',
+      'vanities':                    'vanity-lighting',
+    }
+    const csPath = SLUG_TO_CS_PATH[categorySlug] ?? categorySlug
+    const subPagePrefix = `/resources/programs/contractor-select/${csPath}/`
+
+    const subUrls: string[] = await page.evaluate((prefix: string) => {
       const seen = new Set<string>()
-      const found: Array<{ href: string; text: string }> = []
+      const found: string[] = []
       document.querySelectorAll('a[href]').forEach((el) => {
-        const a = el as HTMLAnchorElement
-        const href = a.getAttribute('href') || ''
+        const href = (el as HTMLAnchorElement).getAttribute('href') || ''
         const full = href.startsWith('http') ? href : `https://www.acuitybrands.com${href}`
         try {
           const u = new URL(full)
           if (u.hostname !== 'www.acuitybrands.com') return
-          if (!u.pathname.startsWith('/products/')) return
-          if (u.pathname.includes('/detail/')) return
+          if (!u.pathname.startsWith(prefix)) return
+          // Must be exactly one level deeper than the prefix (no further nesting)
+          const rest = u.pathname.slice(prefix.length).replace(/\/$/, '')
+          if (!rest || rest.includes('/')) return
           if (seen.has(full)) return
           seen.add(full)
-          const text = (a.textContent || '').trim()
-          found.push({ href: full, text })
+          found.push(full)
         } catch { /* skip */ }
       })
       return found
-    })
+    }, subPagePrefix)
 
-    console.log(`[AcuityCS] Found ${links.length} /products/ links on CS landing page`)
-
-    const SLUG_KEYWORDS: Record<string, string[]> = {
-      'downlights':                  ['downlight'],
-      'panels-troffers-wraparounds': ['troffer', 'panel', 'wrap'],
-      'highbay-strip':               ['high', 'bay', 'strip', 'highbay'],
-      'outdoor':                     ['outdoor'],
-      'controls':                    ['control'],
-      'emergency-exit':              ['emergency', 'exit'],
-      'programmable-drivers':        ['driver', 'programmable'],
-      'surface-flush-mount':         ['surface', 'flush'],
-      'switchable':                  ['switch'],
-      'undercabinet':                ['cabinet', 'under'],
-      'vanities':                    ['vanit'],
-    }
-
-    for (const [slug, keywords] of Object.entries(SLUG_KEYWORDS)) {
-      const match = links.find(({ href, text }) => {
-        const target = (href + ' ' + text).toLowerCase()
-        return keywords.some(kw => target.includes(kw))
-      })
-      if (match) {
-        const name = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-        results.push({ slug, name, url: match.href })
-        console.log(`[AcuityCS]   ${slug} → ${match.href}`)
-      } else {
-        console.warn(`[AcuityCS]   No link found for category: ${slug}`)
-      }
-    }
+    console.log(`[AcuityCS]   ${categorySlug}: found ${subUrls.length} sub-pages`)
+    return subUrls
   } catch (err) {
-    console.error(`[AcuityCS] Failed to load CS landing page:`, err)
-  } finally {
-    await page.close()
+    console.error(`[AcuityCS] Failed to discover sub-pages for ${categorySlug}:`, err)
+    return []
   }
-
-  return results
 }
 
 // ─── Product URL Collection (Infinite Scroll) ─────────────────────────────────
@@ -775,31 +770,46 @@ export async function crawlAcuityCS(
     const allEntries: AcuityCSCrawlEntry[] = []
     const seenUrls = new Set<string>()
 
-    const categories = await discoverCSCategoryPages(context)
+    // Filter CS_CATEGORY_MAP to only requested categories (default = all)
+    const categoriesToCrawl = rootCategoriesToCrawl.includes('contractor-select')
+      ? CS_CATEGORY_MAP
+      : CS_CATEGORY_MAP.filter(c => rootCategoriesToCrawl.includes(c.slug))
 
-    if (categories.length === 0) {
-      console.warn('[AcuityCS] No category pages discovered — check CS landing page structure')
+    if (categoriesToCrawl.length === 0) {
+      console.warn('[AcuityCS] No matching categories in CS_CATEGORY_MAP')
       return []
     }
 
     const listPage = await context.newPage()
-    for (const cat of categories) {
-      const productUrls = await collectProductUrlsFromSubcategoryPage(listPage, cat.url)
-      let added = 0
-      for (const url of productUrls) {
-        if (!seenUrls.has(url)) {
-          seenUrls.add(url)
-          allEntries.push({
-            url,
-            rootSlug: 'contractor-select',        // fixed: always under contractor-select
-            subcategorySlug: cat.slug,
-            subcategoryName: cat.name,
-            subcategorySourceUrl: cat.url,
-          })
-          added++
+    for (const cat of categoriesToCrawl) {
+      console.log(`[AcuityCS] Discovering sub-pages for: ${cat.slug} (${cat.url})`)
+
+      // Step 1: discover sub-pages within this category
+      const subPageUrls = await discoverCSSubPages(listPage, cat.url, cat.slug)
+
+      // Step 2: if no sub-pages found, try the category page itself as a product listing
+      const pagesToCollect = subPageUrls.length > 0 ? subPageUrls : [cat.url]
+
+      // Step 3: collect product URLs from each sub-page
+      let catAdded = 0
+      for (const subUrl of pagesToCollect) {
+        const productUrls = await collectProductUrlsFromSubcategoryPage(listPage, subUrl)
+        for (const url of productUrls) {
+          if (!seenUrls.has(url)) {
+            seenUrls.add(url)
+            allEntries.push({
+              url,
+              rootSlug: 'contractor-select',
+              subcategorySlug: cat.slug,
+              subcategoryName: cat.name,
+              subcategorySourceUrl: cat.url,
+            })
+            catAdded++
+          }
         }
+        await delay(800)
       }
-      console.log(`[AcuityCS] ${cat.slug}: ${added} unique products queued`)
+      console.log(`[AcuityCS] ${cat.slug}: ${catAdded} unique products queued`)
       await delay(1000)
     }
     await listPage.close()
