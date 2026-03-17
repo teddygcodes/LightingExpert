@@ -20,17 +20,7 @@ const BASE_URL = 'https://www.acuitybrands.com'
 const CS_LANDING_URL = 'https://www.acuitybrands.com/resources/programs/contractor-select'
 
 export const ACUITY_CS_ROOT_CATEGORY_PATHS: Record<string, string> = {
-  'downlights':                  'downlights',
-  'panels-troffers-wraparounds': 'panels-troffers-wraparounds',
-  'highbay-strip':               'highbay-strip',
-  'outdoor':                     'outdoor',
-  'controls':                    'controls',
-  'emergency-exit':              'emergency-exit',
-  'programmable-drivers':        'programmable-drivers',
-  'surface-flush-mount':         'surface-flush-mount',
-  'switchable':                  'switchable',
-  'undercabinet':                'undercabinet',
-  'vanities':                    'vanities',
+  'contractor-select': 'contractor-select',
 }
 
 const STEALTH_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
@@ -227,7 +217,6 @@ async function discoverCSCategoryPages(
     }
 
     for (const [slug, keywords] of Object.entries(SLUG_KEYWORDS)) {
-      if (!rootCategoriesToCrawl.includes(slug)) continue
       const match = links.find(({ href, text }) => {
         const target = (href + ' ' + text).toLowerCase()
         return keywords.some(kw => target.includes(kw))
@@ -803,7 +792,7 @@ export async function crawlAcuityCS(
           seenUrls.add(url)
           allEntries.push({
             url,
-            rootSlug: cat.slug,
+            rootSlug: 'contractor-select',        // fixed: always under contractor-select
             subcategorySlug: cat.slug,
             subcategoryName: cat.name,
             subcategorySourceUrl: cat.url,

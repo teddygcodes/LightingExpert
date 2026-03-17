@@ -132,42 +132,24 @@ async function main() {
     })
   }
 
-  // ─── Acuity Contractor Select — 11 top-level browse categories ───────────────
-  await prisma.manufacturer.upsert({
-    where: { slug: 'acuity-cs' },
-    update: { name: 'Acuity Contractor Select' },
+  // ─── Acuity Contractor Select root category (under Acuity Brands) ────────────
+  // Child subcategories (downlights, panels-troffers-wraparounds, etc.) are
+  // auto-created by the acuity-cs crawler's upsert logic on first crawl run.
+  const acuityForCS = await prisma.manufacturer.findUniqueOrThrow({ where: { slug: 'acuity' } })
+  await prisma.category.upsert({
+    where: { manufacturerId_path: { manufacturerId: acuityForCS.id, path: 'contractor-select' } },
+    update: { name: 'Contractor Select' },
     create: {
-      name: 'Acuity Contractor Select',
-      slug: 'acuity-cs',
-      website: 'https://www.acuitybrands.com/resources/programs/contractor-select',
+      manufacturerId: acuityForCS.id,
+      name: 'Contractor Select',
+      slug: 'contractor-select',
+      path: 'contractor-select',
+      sortOrder: 8,
+      sourceUrl: 'https://www.acuitybrands.com/resources/programs/contractor-select',
     },
   })
-  const acuityCS = await prisma.manufacturer.findUniqueOrThrow({ where: { slug: 'acuity-cs' } })
 
-  const ACUITY_CS_ROOT_CATEGORIES = [
-    { name: 'Downlights',                      slug: 'downlights' },
-    { name: 'Panels, Troffers & Wraparounds',  slug: 'panels-troffers-wraparounds' },
-    { name: 'Highbay & Strip Lights',          slug: 'highbay-strip' },
-    { name: 'Outdoor',                         slug: 'outdoor' },
-    { name: 'Controls',                        slug: 'controls' },
-    { name: 'Emergency & Exit',                slug: 'emergency-exit' },
-    { name: 'Programmable LED Drivers',        slug: 'programmable-drivers' },
-    { name: 'Surface / Flush Mount',           slug: 'surface-flush-mount' },
-    { name: 'Switchable',                      slug: 'switchable' },
-    { name: 'Undercabinet',                    slug: 'undercabinet' },
-    { name: 'Vanities',                        slug: 'vanities' },
-  ]
-
-  for (let i = 0; i < ACUITY_CS_ROOT_CATEGORIES.length; i++) {
-    const { name, slug } = ACUITY_CS_ROOT_CATEGORIES[i]
-    await prisma.category.upsert({
-      where: { manufacturerId_path: { manufacturerId: acuityCS.id, path: slug } },
-      update: { name, sortOrder: i },
-      create: { manufacturerId: acuityCS.id, name, slug, path: slug, sortOrder: i },
-    })
-  }
-
-  console.log('Seeded 6 manufacturers: 2 Elite, 8 Acuity, 3 Cooper, 3 Current Lighting, 2 Lutron, and 11 Acuity Contractor Select top-level categories.')
+  console.log('Seeded 5 manufacturers: 2 Elite, 9 Acuity (incl. Contractor Select), 3 Cooper, 3 Current Lighting, 2 Lutron top-level categories.')
 }
 
 main()

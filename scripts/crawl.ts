@@ -14,6 +14,7 @@ import { crawlAcuity, AcuityProduct, ACUITY_ROOT_CATEGORY_PATHS } from '../lib/c
 import { crawlCooper, CooperProduct, COOPER_ROOT_CATEGORY_PATHS } from '../lib/crawler/cooper'
 import { crawlCurrent, CurrentProduct, CURRENT_ROOT_CATEGORY_PATHS } from '../lib/crawler/current'
 import { crawlLutron, LutronProduct, LUTRON_ROOT_CATEGORY_PATHS } from '../lib/crawler/lutron'
+import { crawlAcuityCS, AcuityCsProduct, ACUITY_CS_ROOT_CATEGORY_PATHS } from '../lib/crawler/acuity-cs'
 import {
   normalizeVoltage,
   normalizeDimmingTypes,
@@ -32,13 +33,15 @@ const manufacturer = manufacturerArg ? manufacturerArg.replace('--manufacturer='
 const categoriesArg = args.find((a) => a.startsWith('--categories='))
 const defaultCategories = manufacturer === 'acuity'
   ? Object.keys(ACUITY_ROOT_CATEGORY_PATHS)
-  : manufacturer === 'cooper'
-    ? Object.keys(COOPER_ROOT_CATEGORY_PATHS)
-    : manufacturer === 'current'
-      ? Object.keys(CURRENT_ROOT_CATEGORY_PATHS)
-      : manufacturer === 'lutron'
-        ? Object.keys(LUTRON_ROOT_CATEGORY_PATHS)
-        : Object.keys(ELITE_ROOT_CATEGORY_PATHS)
+  : manufacturer === 'acuity-cs'
+    ? Object.keys(ACUITY_CS_ROOT_CATEGORY_PATHS)
+    : manufacturer === 'cooper'
+      ? Object.keys(COOPER_ROOT_CATEGORY_PATHS)
+      : manufacturer === 'current'
+        ? Object.keys(CURRENT_ROOT_CATEGORY_PATHS)
+        : manufacturer === 'lutron'
+          ? Object.keys(LUTRON_ROOT_CATEGORY_PATHS)
+          : Object.keys(ELITE_ROOT_CATEGORY_PATHS)
 const categories = categoriesArg
   ? categoriesArg.replace('--categories=', '').split(',').map(s => s.trim()).filter(Boolean)
   : defaultCategories
@@ -60,9 +63,11 @@ async function run() {
   console.log('')
 
   // Resolve the active manufacturer record
-  const manufacturerRecord = await prisma.manufacturer.findUnique({ where: { slug: manufacturer } })
+  // acuity-cs is a separate crawl but stores products under the acuity manufacturer
+  const dbSlug = manufacturer === 'acuity-cs' ? 'acuity' : manufacturer
+  const manufacturerRecord = await prisma.manufacturer.findUnique({ where: { slug: dbSlug } })
   if (!manufacturerRecord) {
-    console.error(`Error: Manufacturer "${manufacturer}" not found. Run: npm run db:seed`)
+    console.error(`Error: Manufacturer "${dbSlug}" not found. Run: npm run db:seed`)
     process.exit(1)
   }
 
@@ -152,9 +157,11 @@ async function run() {
 
   try {
     // Route to the correct manufacturer crawler
-    let products: (EliteProduct | AcuityProduct | CooperProduct | CurrentProduct | LutronProduct)[]
+    let products: (EliteProduct | AcuityProduct | AcuityCsProduct | CooperProduct | CurrentProduct | LutronProduct)[]
     if (manufacturer === 'acuity') {
       products = await crawlAcuity(categories)
+    } else if (manufacturer === 'acuity-cs') {
+      products = await crawlAcuityCS(categories)
     } else if (manufacturer === 'cooper') {
       products = await crawlCooper(categories)
     } else if (manufacturer === 'current') {

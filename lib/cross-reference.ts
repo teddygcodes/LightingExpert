@@ -431,7 +431,11 @@ export async function findMatches(
     }
 
     const { score, reasons } = scoreMatch(source, target)
-    const matchType = determineMatchType(score, source, target)
+    // Force BUDGET_ALTERNATIVE for Contractor Select products regardless of score
+    const isContractorSelect = target.category?.path?.startsWith('contractor-select') ?? false
+    const matchType = isContractorSelect
+      ? MatchType.BUDGET_ALTERNATIVE
+      : determineMatchType(score, source, target)
     const snapshot = buildComparisonSnapshot(source, target)
 
     // Persist to CrossReference table
