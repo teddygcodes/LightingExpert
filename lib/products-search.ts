@@ -63,6 +63,7 @@ const PRODUCT_SELECT = {
   specSheetPath: true,
   specSheets: true,
   productPageUrl: true,
+  canonicalFixtureType: true,
   manufacturer: { select: { name: true, slug: true } },
 } as const
 

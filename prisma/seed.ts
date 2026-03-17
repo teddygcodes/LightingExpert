@@ -132,7 +132,24 @@ async function main() {
     })
   }
 
-  console.log('Seeded 5 manufacturers: 2 Elite, 8 Acuity, 3 Cooper, 3 Current Lighting, and 2 Lutron top-level categories.')
+  // ─── Acuity Contractor Select root category (under Acuity Brands) ────────────
+  // Child subcategories (downlights, panels-troffers-wraparounds, etc.) are
+  // auto-created by the acuity-cs crawler's upsert logic on first crawl run.
+  const acuityForCS = await prisma.manufacturer.findUniqueOrThrow({ where: { slug: 'acuity' } })
+  await prisma.category.upsert({
+    where: { manufacturerId_path: { manufacturerId: acuityForCS.id, path: 'contractor-select' } },
+    update: { name: 'Contractor Select' },
+    create: {
+      manufacturerId: acuityForCS.id,
+      name: 'Contractor Select',
+      slug: 'contractor-select',
+      path: 'contractor-select',
+      sortOrder: 8,
+      sourceUrl: 'https://www.acuitybrands.com/resources/programs/contractor-select',
+    },
+  })
+
+  console.log('Seeded 5 manufacturers: 2 Elite, 9 Acuity (incl. Contractor Select), 3 Cooper, 3 Current Lighting, 2 Lutron top-level categories.')
 }
 
 main()
