@@ -11,6 +11,7 @@ import type {
   SpecSheetToolResult,
   AddToSubmittalToolResult,
   RecommendFixturesToolResult,
+  RecommendationResult,
 } from '@/lib/agent/types'
 
 interface Props {
