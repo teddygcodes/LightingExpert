@@ -99,6 +99,21 @@ enum CrawlStatus {
   INTERRUPTED
 }
 
+enum ExtractionStatus {
+  PENDING
+  SUCCESS
+  PARTIAL    // some fields extracted, some failed or suspicious PDF
+  FAILED     // Claude call failed or PDF unreadable
+  SUSPICIOUS // PDF parseable but structurally bad (too short, garbled, no headers)
+}
+
+enum PromotionStatus {
+  NOT_RUN
+  PROMOTED  // all core fields promoted
+  PARTIAL   // some core fields promoted, or only soft fields promoted
+  SKIPPED   // nothing met threshold
+}
+
 enum CanonicalFixtureType {
   HIGH_BAY
   LOW_BAY
@@ -273,6 +288,21 @@ model Product {
   crawlEvidence    Json?
   configOptions    Json?
   lastCrawled      DateTime?
+
+  // ── PDF Extraction (staging — clean blobs, separated concerns) ──
+  specExtractionJson      Json?              // Claude raw output only — no metadata mixed in
+  specEvidenceJson        Json?              // Per-field evidence snippets: { lumens: "12k–30k lm (table row 3)" }
+  specPromotionSummaryJson Json?             // Ops/UI debug metadata: promotedFields, skippedFields, confidence, etc.
+  specExtractionErrors    String[]
+  specExtractionStatus    ExtractionStatus?
+  specPromotionStatus     PromotionStatus?
+  specExtractedAt         DateTime?
+  specPromotedAt          DateTime?
+  rawSpecText             String?   @db.Text // @db.Text required for PostgreSQL (up to 20K chars)
+
+  // ── New spec fields ──
+  opticalDistribution     String[]
+  applications            String[]
 
   // Verification
   lastVerifiedAt   DateTime?

@@ -13,7 +13,10 @@ export async function GET(
     include: { manufacturer: { select: { name: true, slug: true } } },
   })
   if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json(product)
+  // Strip internal extraction fields — not needed by UI, reduces payload size
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { rawSpecText, specExtractionJson, specEvidenceJson, crawlEvidence, ...publicProduct } = product
+  return NextResponse.json(publicProduct)
 }
 
 export async function PUT(

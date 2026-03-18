@@ -6,7 +6,9 @@ import { LIGHTING_EXPERT_SYSTEM_PROMPT } from '@/lib/agent/system-prompt'
 import { agentTools } from '@/lib/agent/tools'
 import { checkRateLimit } from '@/lib/agent/rate-limit'
 
-const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+const apiKey = process.env.ANTHROPIC_API_KEY
+if (!apiKey) throw new Error('ANTHROPIC_API_KEY environment variable is not set')
+const anthropic = createAnthropic({ apiKey })
 
 export async function POST(req: NextRequest) {
   // Rate limiting by IP
@@ -32,6 +34,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   // Trim: keep last 20 messages; strip tool result content from messages older than 10 from end
   const allMessages = body.messages ?? []
+  if (allMessages.length > 100) {
+    return new Response(
+      JSON.stringify({ error: 'Too many messages in request' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
   const messages = trimMessages(allMessages)
 
   const result = streamText({

@@ -23,7 +23,9 @@
     "db:seed": "ts-node --esm --project tsconfig.scripts.json prisma/seed.ts",
     "db:studio": "prisma studio",
     "classify": "ts-node --project tsconfig.scripts.json scripts/classify-fixtures.ts",
-    "classify:ai": "ts-node --project tsconfig.scripts.json scripts/classify-fixtures-ai.ts"
+    "classify:ai": "ts-node --project tsconfig.scripts.json scripts/classify-fixtures-ai.ts",
+    "extract-specs": "ts-node --project tsconfig.scripts.json scripts/extract-specs-from-pdfs.ts",
+    "promote-specs": "ts-node --project tsconfig.scripts.json scripts/promote-extractions.ts"
   },
   "prisma": {
     "seed": "npm run db:seed"
@@ -36,7 +38,7 @@
     "cheerio": "^1.2.0",
     "dotenv": "^17.3.1",
     "lucide-react": "^0.577.0",
-    "next": "16.1.6",
+    "next": "^16.1.7",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^4.10.38",

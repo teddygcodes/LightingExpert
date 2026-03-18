@@ -21,6 +21,8 @@ export const VOLTAGE_MAP: Record<string, Voltage> = {
   '347-480': Voltage.V347_480,
   '120/347': Voltage.V120_347,
   '120-347': Voltage.V120_347,
+  'uvolt': Voltage.V120_347,
+  'uvolt (120-347v)': Voltage.V120_347,
   'universal': Voltage.UNIVERSAL,
   'universal (120-277v)': Voltage.V120_277,
   'multi-volt': Voltage.UNIVERSAL,

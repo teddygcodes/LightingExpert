@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 
 export async function GET() {
   const manufacturers = await prisma.manufacturer.findMany({
+    take: 100,
     include: {
       products: {
         where: { isActive: true },

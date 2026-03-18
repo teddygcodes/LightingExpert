@@ -159,10 +159,19 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
     0.10
   )
   score += lumensScore * 0.20
-  if (lumensScore >= 0.9) reasons.push('Lumen output matches closely')
-  else if (lumensScore >= 0.6) reasons.push('Lumen output is similar')
-  else if (lumensScore > 0) reasons.push('Lumen output differs moderately')
-  else reasons.push('Lumen output does not overlap')
+  {
+    const sLumStr = (source.lumensMin != null && source.lumensMax != null)
+      ? `${source.lumensMin.toLocaleString()}–${source.lumensMax.toLocaleString()} lm`
+      : source.lumens != null ? `${source.lumens.toLocaleString()} lm` : null
+    const tLumStr = (target.lumensMin != null && target.lumensMax != null)
+      ? `${target.lumensMin.toLocaleString()}–${target.lumensMax.toLocaleString()} lm`
+      : target.lumens != null ? `${target.lumens.toLocaleString()} lm` : null
+    const lumLabel = sLumStr && tLumStr ? `target ${tLumStr} vs source ${sLumStr}` : null
+    if (lumensScore >= 0.9) reasons.push(lumLabel ? `Lumens match: ${lumLabel}` : 'Lumen output matches closely')
+    else if (lumensScore >= 0.6) reasons.push(lumLabel ? `Lumens similar: ${lumLabel}` : 'Lumen output is similar')
+    else if (lumensScore > 0) reasons.push(lumLabel ? `Lumens differ: ${lumLabel}` : 'Lumen output differs moderately')
+    else reasons.push(lumLabel ? `Lumens no overlap: ${lumLabel}` : 'Lumen output does not overlap')
+  }
 
   // CRI match (weight 0.10)
   if (source.cri && target.cri) {
@@ -184,14 +193,17 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
   if (source.cctOptions.length > 0 && target.cctOptions.length > 0) {
     const overlap = source.cctOptions.filter((c) => target.cctOptions.includes(c))
     const pctOverlap = overlap.length / source.cctOptions.length
+    const sSrc = source.cctOptions.map(c => `${c}K`).join('/')
+    const sTgt = target.cctOptions.map(c => `${c}K`).join('/')
+    const sOver = overlap.map(c => `${c}K`).join('/')
     if (pctOverlap >= 1.0) {
       score += 0.10
-      reasons.push('Full CCT overlap')
+      reasons.push(`CCT full match: ${sSrc}`)
     } else if (pctOverlap >= 0.5) {
       score += 0.05
-      reasons.push(`Partial CCT overlap (${overlap.join(', ')}K)`)
+      reasons.push(`CCT partial: source ${sSrc}, target ${sTgt} (shared: ${sOver})`)
     } else {
-      reasons.push(`Limited CCT overlap — source has ${source.cctOptions.join(', ')}K, target has ${target.cctOptions.join(', ')}K`)
+      reasons.push(`CCT limited overlap: source ${sSrc}, target ${sTgt}`)
     }
   } else {
     score += 0.05
@@ -204,7 +216,15 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
     0.15
   )
   score += wattScore * 0.05
-  if (wattScore < 0.5) reasons.push('Wattage differs significantly')
+  if (wattScore < 0.5) {
+    const sWStr = (source.wattageMin != null && source.wattageMax != null)
+      ? `${source.wattageMin}–${source.wattageMax}W`
+      : source.wattage != null ? `${source.wattage}W` : null
+    const tWStr = (target.wattageMin != null && target.wattageMax != null)
+      ? `${target.wattageMin}–${target.wattageMax}W`
+      : target.wattage != null ? `${target.wattage}W` : null
+    reasons.push(sWStr && tWStr ? `Wattage differs: target ${tWStr} vs source ${sWStr}` : 'Wattage differs significantly')
+  }
 
   // Dimming compatibility (weight 0.10)
   if (source.dimmable === true && target.dimmable === true) {
@@ -217,7 +237,7 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
         reasons.push(`Dimming protocol matches (${overlap.join(', ')})`)
       } else {
         score += 0.07
-        reasons.push('Both dimmable but different protocols')
+        reasons.push(`Source: ${srcTypes.join('/')} dimming; Target: ${tgtTypes.join('/')} — verify control system compatibility`)
       }
     } else {
       score += 0.07
@@ -314,36 +334,70 @@ function buildComparisonSnapshot(source: Product, target: Product): ComparisonSn
 
   const deltas: Record<string, string> = {}
 
-  // Lumens delta
-  const sLum = source.lumens ?? source.lumensMax ?? null
-  const tLum = target.lumens ?? target.lumensMax ?? null
-  if (sLum && tLum) {
-    const pct = Math.round(((tLum - sLum) / sLum) * 100)
-    deltas.lumens = pct >= 0 ? `+${pct}%` : `${pct}%`
+  // Lumens delta — cite actual ranges
+  const sLumStr = (source.lumensMin != null && source.lumensMax != null)
+    ? `${source.lumensMin.toLocaleString()}–${source.lumensMax.toLocaleString()} lm`
+    : source.lumens != null ? `${source.lumens.toLocaleString()} lm` : null
+  const tLumStr = (target.lumensMin != null && target.lumensMax != null)
+    ? `${target.lumensMin.toLocaleString()}–${target.lumensMax.toLocaleString()} lm`
+    : target.lumens != null ? `${target.lumens.toLocaleString()} lm` : null
+  if (sLumStr && tLumStr) {
+    const sLum = source.lumens ?? source.lumensMax ?? 0
+    const tLum = target.lumens ?? target.lumensMax ?? 0
+    if (sLum && tLum) {
+      const pct = Math.round(((tLum - sLum) / sLum) * 100)
+      deltas.lumens = `${tLumStr} vs ${sLumStr} (${pct >= 0 ? '+' : ''}${pct}%)`
+    } else {
+      deltas.lumens = `${tLumStr} vs ${sLumStr}`
+    }
   }
 
-  // Wattage delta
-  const sWatt = source.wattage ?? source.wattageMax ?? null
-  const tWatt = target.wattage ?? target.wattageMax ?? null
-  if (sWatt && tWatt) {
-    const pct = Math.round(((tWatt - sWatt) / sWatt) * 100)
-    deltas.wattage = pct >= 0 ? `+${pct}%` : `${pct}%`
+  // Wattage delta — cite actual ranges
+  const sWattStr = (source.wattageMin != null && source.wattageMax != null)
+    ? `${source.wattageMin}–${source.wattageMax}W`
+    : source.wattage != null ? `${source.wattage}W` : null
+  const tWattStr = (target.wattageMin != null && target.wattageMax != null)
+    ? `${target.wattageMin}–${target.wattageMax}W`
+    : target.wattage != null ? `${target.wattage}W` : null
+  if (sWattStr && tWattStr) {
+    const sWatt = source.wattage ?? source.wattageMax ?? 0
+    const tWatt = target.wattage ?? target.wattageMax ?? 0
+    if (sWatt && tWatt) {
+      const pct = Math.round(((tWatt - sWatt) / sWatt) * 100)
+      deltas.wattage = `${tWattStr} vs ${sWattStr} (${pct >= 0 ? '+' : ''}${pct}%)`
+    } else {
+      deltas.wattage = `${tWattStr} vs ${sWattStr}`
+    }
   }
 
   // CRI delta
   if (source.cri && target.cri) {
-    if (target.cri > source.cri) deltas.cri = `Target higher (+${target.cri - source.cri})`
-    else if (target.cri < source.cri) deltas.cri = `Target lower (${target.cri - source.cri})`
-    else deltas.cri = 'Match'
+    if (target.cri > source.cri) deltas.cri = `Target CRI ${target.cri} vs source ${source.cri} (+${target.cri - source.cri})`
+    else if (target.cri < source.cri) deltas.cri = `Target CRI ${target.cri} vs source ${source.cri} (${target.cri - source.cri})`
+    else deltas.cri = `CRI ${source.cri} — match`
   }
 
-  // CCT delta
+  // CCT delta — cite actual values
   if (source.cctOptions.length > 0 && target.cctOptions.length > 0) {
+    const sSrc = source.cctOptions.map(c => `${c}K`).join('/')
+    const sTgt = target.cctOptions.map(c => `${c}K`).join('/')
     const missing = source.cctOptions.filter((c) => !target.cctOptions.includes(c))
     const extra = target.cctOptions.filter((c) => !source.cctOptions.includes(c))
-    if (missing.length > 0) deltas.cctOptions = `Target missing ${missing.map((c) => `${c}K`).join(', ')}`
-    else if (extra.length > 0) deltas.cctOptions = `Target adds ${extra.map((c) => `${c}K`).join(', ')}`
-    else deltas.cctOptions = 'Full match'
+    if (missing.length === 0 && extra.length === 0) {
+      deltas.cctOptions = `Full match: ${sSrc}`
+    } else if (missing.length > 0) {
+      deltas.cctOptions = `Source: ${sSrc}; Target: ${sTgt} — target missing ${missing.map(c => `${c}K`).join('/')}`
+    } else {
+      deltas.cctOptions = `Source: ${sSrc}; Target: ${sTgt} — target adds ${extra.map(c => `${c}K`).join('/')}`
+    }
+  }
+
+  // Dimming delta — cite protocol names
+  if (source.dimmingType.length > 0 && target.dimmingType.length > 0) {
+    const overlap = source.dimmingType.filter(d => target.dimmingType.includes(d))
+    if (overlap.length === 0) {
+      deltas.dimming = `Source: ${source.dimmingType.join('/')}; Target: ${target.dimmingType.join('/')} — verify controls`
+    }
   }
 
   return { source: srcSnap, target: tgtSnap, deltas }

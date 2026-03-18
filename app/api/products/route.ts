@@ -10,9 +10,14 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get('search')?.trim() || ''
   const categoryId = searchParams.get('categoryId') || ''
   const manufacturerId = searchParams.get('manufacturerId') || ''
-  const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
-  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')))
+  const page = Math.max(1, Math.min(10000, parseInt(searchParams.get('page') || '1', 10) || 1))
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50))
   const offset = (page - 1) * pageSize
+
+  // Input length guard
+  if (search && search.length > 200) {
+    return NextResponse.json({ error: 'Search query too long' }, { status: 400 })
+  }
 
   const where: Prisma.ProductWhereInput = { isActive: true }
   if (manufacturerId) where.manufacturerId = manufacturerId
@@ -93,7 +98,7 @@ export async function GET(req: NextRequest) {
 
     // Full-text search via tsvector (single-token or manufacturer search returned nothing)
     try {
-      const escaped = search.replace(/['"\\]/g, '')
+      const escaped = search.trim().substring(0, 200)
       const rows = await prisma.$queryRaw<{ id: string }[]>`
         SELECT id FROM "Product"
         WHERE "isActive" = true
