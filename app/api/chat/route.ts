@@ -6,11 +6,17 @@ import { LIGHTING_EXPERT_SYSTEM_PROMPT } from '@/lib/agent/system-prompt'
 import { agentTools } from '@/lib/agent/tools'
 import { checkRateLimit } from '@/lib/agent/rate-limit'
 
-const apiKey = process.env.ANTHROPIC_API_KEY
-if (!apiKey) throw new Error('ANTHROPIC_API_KEY environment variable is not set')
-const anthropic = createAnthropic({ apiKey })
-
 export async function POST(req: NextRequest) {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    console.error('[chat route] ANTHROPIC_API_KEY is not set')
+    return new Response(
+      JSON.stringify({ error: 'Service temporarily unavailable' }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+  const anthropic = createAnthropic({ apiKey })
+
   // Rate limiting by IP
   const ip =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
