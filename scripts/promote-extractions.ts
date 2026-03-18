@@ -62,6 +62,7 @@ const MIN_CONFIDENCE: Record<string, number> = {
   applications: 0.65,
   description: 0.70,
   mountingTypes: 0.75,
+  formFactor: 0.75,
 }
 
 // ─── Field mapping: extraction JSON key → Product DB field ───────────────────
@@ -93,6 +94,7 @@ const FIELD_MAP: Record<string, string> = {
   opticalDistribution: 'opticalDistribution',
   applications: 'applications',
   description: 'description',
+  formFactor: 'formFactor',
 }
 
 // ─── Type conversion helpers ──────────────────────────────────────────────────

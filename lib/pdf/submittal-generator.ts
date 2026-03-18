@@ -152,9 +152,14 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
       continue
     }
 
-    const absolutePath = fixture.specSheetPath.startsWith('/')
-      ? path.join(process.cwd(), 'public', fixture.specSheetPath)
-      : fixture.specSheetPath
+    const publicDir = path.join(process.cwd(), 'public')
+    const resolvedPath = path.resolve(publicDir, fixture.specSheetPath.replace(/^\//, ''))
+    if (!resolvedPath.startsWith(publicDir + path.sep)) {
+      warnings.push(`Invalid spec sheet path for ${fixture.catalogNumber} — path traversal rejected`)
+      await buildMissingPlaceholder(doc, fixture.catalogNumber, 'Invalid file path')
+      continue
+    }
+    const absolutePath = resolvedPath
 
     if (!fs.existsSync(absolutePath)) {
       warnings.push(`Spec sheet file not found for ${fixture.catalogNumber}: ${absolutePath}`)

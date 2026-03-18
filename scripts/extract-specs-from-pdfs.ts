@@ -29,7 +29,6 @@ import { Prisma } from '@prisma/client'
 
 const anthropic = new Anthropic()
 
-const DELAY_MS = 500
 const MAX_PDF_TEXT = 20000 // 20K chars — enough for most spec sheets
 
 // ─── Suspicious PDF detection ────────────────────────────────────────────────
@@ -311,6 +310,7 @@ IMPORTANT:
 - For CCT options, use the exact format "3000K", "3500K", "4000K", etc.
 - For mounting types, use lowercase: "pendant", "hook", "surface", "chain", "wall", "recessed", "pole", "stem"
 - For optical distributions, use lowercase: "wide", "medium", "narrow", "very wide", "asymmetric"
+- For formFactor: if the fixture is available in multiple sizes (e.g. 1x4, 2x2, and 2x4 troffer), list all sizes comma-separated (e.g. "1X4, 2X2, 2X4"). If only one size, give that single value (e.g. "2X4"). Use uppercase normalized format: 1X4, 2X2, 2X4, 4_INCH_ROUND, 6_INCH_ROUND, etc.
 - Include an "_evidence" key mapping each extracted field name to a brief quote/location from the text.
 
 Return this exact JSON shape (use null for missing values):
@@ -338,6 +338,7 @@ Return this exact JSON shape (use null for missing values):
   "dlcListed": boolean or null,
   "dlcPremium": boolean or null,
   "energyStar": boolean or null,
+  "formFactor": string or null,
   "opticalDistribution": string[] or null,
   "applications": string[] or null,
   "description": string or null,
@@ -386,7 +387,9 @@ async function extractPdfText(filePath: string): Promise<string | null> {
     await parser.load()
     const result = await parser.getText() as { pages: Array<{ text: string }> }
     const text = result.pages.map((p: { text: string }) => p.text).join('\n')
-    return text.substring(0, MAX_PDF_TEXT) || null
+    // Strip null bytes — PostgreSQL UTF-8 rejects 0x00
+    const clean = text.replace(/\0/g, '').substring(0, MAX_PDF_TEXT)
+    return clean || null
   } catch (err) {
     console.error(`  PDF parse failed for ${filePath}:`, err instanceof Error ? err.message : err)
     return null
@@ -410,12 +413,32 @@ function resolvePdfPath(specSheetPath: string): string | null {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+// ─── Concurrency pool ─────────────────────────────────────────────────────────
+
+async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  const queue = items.map((item, index) => ({ item, index }))
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (queue.length > 0) {
+      const next = queue.shift()
+      if (!next) break
+      await fn(next.item, next.index)
+    }
+  })
+  await Promise.all(workers)
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const manufacturerArg = args.find(a => a.startsWith('--manufacturer='))?.split('=')[1]
   const limitArg = args.find(a => a.startsWith('--limit='))?.split('=')[1]
   const catalogArg = args.find(a => a.startsWith('--catalog='))?.split('=')[1]
   const idArg = args.find(a => a.startsWith('--id='))?.split('=')[1]
+  const concurrencyArg = args.find(a => a.startsWith('--concurrency='))?.split('=')[1]
+  const concurrency = concurrencyArg ? parseInt(concurrencyArg) : 10
   const force = args.includes('--force')
   const dryRun = args.includes('--dry-run')
 
@@ -451,25 +474,19 @@ async function main() {
     orderBy: { catalogNumber: 'asc' },
   })
 
-  console.log(`Found ${products.length} products to extract specs from`)
+  console.log(`Found ${products.length} products to extract specs from (concurrency: ${dryRun ? 1 : concurrency})`)
   if (products.length === 0) return
 
-  let extracted = 0
-  let withErrors = 0
-  let failed = 0
-  let suspicious = 0
-  let noPdf = 0
+  const stats = { extracted: 0, withErrors: 0, failed: 0, suspicious: 0, noPdf: 0, done: 0 }
 
-  for (let i = 0; i < products.length; i++) {
-    const product = products[i]
+  const processProduct = async (product: typeof products[number], i: number) => {
     const specPath = product.specSheetPath
-    if (!specPath) { noPdf++; continue }
+    if (!specPath) { stats.noPdf++; stats.done++; return }
 
     const pdfPath = resolvePdfPath(specPath)
     if (!pdfPath) {
-      if (!dryRun) console.log(`  [${i + 1}/${products.length}] SKIP ${product.catalogNumber} — PDF not found at ${specPath}`)
-      noPdf++
-      continue
+      stats.noPdf++; stats.done++
+      return
     }
 
     // Extract text
@@ -482,8 +499,8 @@ async function main() {
           data: { specExtractionStatus: ExtractionStatus.FAILED, specExtractedAt: new Date() },
         })
       }
-      failed++
-      continue
+      stats.failed++; stats.done++
+      return
     }
 
     // Suspicious PDF check
@@ -500,8 +517,8 @@ async function main() {
           },
         })
       }
-      suspicious++
-      continue
+      stats.suspicious++; stats.done++
+      return
     }
 
     // DRY RUN: show text snippet + stop before Claude
@@ -521,8 +538,8 @@ async function main() {
           data: { specExtractionStatus: ExtractionStatus.FAILED, specExtractedAt: new Date() },
         })
       }
-      failed++
-      continue
+      stats.failed++; stats.done++
+      return
     }
 
     // Separate _evidence from the main extraction payload
@@ -530,72 +547,85 @@ async function main() {
     const rawWithoutEvidence = { ...rawResult }
     delete rawWithoutEvidence._evidence
 
-    // Normalize
-    const normalized = normalizeExtracted(rawWithoutEvidence)
+    // Strip null bytes from all string values (PostgreSQL UTF-8 rejects 0x00)
+    const stripNulls = (obj: Record<string, unknown>): Record<string, unknown> => {
+      const out: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === 'string') out[k] = v.replace(/\0/g, '')
+        else if (Array.isArray(v)) out[k] = v.map(x => typeof x === 'string' ? x.replace(/\0/g, '') : x)
+        else out[k] = v
+      }
+      return out
+    }
+    const strippedWithoutEvidence = stripNulls(rawWithoutEvidence)
+    const strippedEvidence = stripNulls(evidenceMap as Record<string, unknown>)
+    Object.assign(evidenceMap, strippedEvidence)
 
-    // Validate
+    // Normalize then validate
+    const normalized = normalizeExtracted(strippedWithoutEvidence)
     const { cleanedData, errors, overallConfidence } = validateExtraction(normalized)
 
-    // Determine status
-    let status: ExtractionStatus
-    if (errors.length > 0 || overallConfidence < 0.40) {
-      status = ExtractionStatus.PARTIAL
-    } else {
-      status = ExtractionStatus.SUCCESS
-    }
+    const status: ExtractionStatus = (errors.length > 0 || overallConfidence < 0.40)
+      ? ExtractionStatus.PARTIAL
+      : ExtractionStatus.SUCCESS
 
     if (dryRun) {
       console.log(`  Status: ${status} | Confidence: ${(overallConfidence * 100).toFixed(0)}%`)
       if (errors.length > 0) console.log(`  Errors: ${errors.join('; ')}`)
       console.log(`  Extracted:`, JSON.stringify(cleanedData, null, 2).substring(0, 800))
       console.log(`  Evidence:`, JSON.stringify(evidenceMap, null, 2))
+      console.log('\nDone.\n  (DRY RUN — no changes written)')
     } else {
-      // Write to staging fields only — NOT to main Product fields
-      await prisma.product.update({
-        where: { id: product.id },
-        data: {
-          specExtractionJson: cleanedData as Prisma.InputJsonValue,
-          specEvidenceJson: evidenceMap as Prisma.InputJsonValue,
-          specExtractionErrors: errors,
-          specExtractionStatus: status,
-          specExtractedAt: new Date(),
-          rawSpecText: pdfText,
-        },
-      })
+      try {
+        await prisma.product.update({
+          where: { id: product.id },
+          data: {
+            specExtractionJson: cleanedData as Prisma.InputJsonValue,
+            specEvidenceJson: evidenceMap as Prisma.InputJsonValue,
+            specExtractionErrors: errors,
+            specExtractionStatus: status,
+            specExtractedAt: new Date(),
+            rawSpecText: pdfText,
+          },
+        })
 
-      extracted++
-      if (errors.length > 0) {
-        withErrors++
-        if (errors.length <= 3) {
-          console.log(`  [${i + 1}/${products.length}] WARN ${product.manufacturer.name} | ${product.catalogNumber} — ${errors.join('; ')}`)
+        stats.extracted++
+        if (errors.length > 0) {
+          stats.withErrors++
+          console.log(`  [${i + 1}/${products.length}] WARN ${product.manufacturer.name} | ${product.catalogNumber} — ${errors.slice(0, 2).join('; ')}${errors.length > 2 ? ` (+${errors.length - 2} more)` : ''}`)
         } else {
-          console.log(`  [${i + 1}/${products.length}] WARN ${product.manufacturer.name} | ${product.catalogNumber} — ${errors.length} validation errors`)
+          console.log(`  [${i + 1}/${products.length}] OK ${product.manufacturer.name} | ${product.catalogNumber} (${(overallConfidence * 100).toFixed(0)}% confidence)`)
         }
-      } else {
-        console.log(`  [${i + 1}/${products.length}] OK ${product.manufacturer.name} | ${product.catalogNumber} (${(overallConfidence * 100).toFixed(0)}% confidence)`)
+      } catch (dbErr) {
+        console.error(`  [${i + 1}/${products.length}] DB ERROR ${product.catalogNumber} — ${dbErr instanceof Error ? dbErr.message.split('\n')[0] : dbErr}`)
+        stats.failed++
       }
     }
 
-    // Rate limit between API calls
-    if (i < products.length - 1) await new Promise(r => setTimeout(r, DELAY_MS))
+    stats.done++
 
     // Progress every 100
-    if ((i + 1) % 100 === 0) {
-      console.log(`\n  Progress: ${i + 1}/${products.length} | extracted: ${extracted} | warnings: ${withErrors} | failed: ${failed} | suspicious: ${suspicious} | no PDF: ${noPdf}\n`)
+    if (stats.done % 100 === 0) {
+      console.log(`\n  ── Progress: ${stats.done}/${products.length} | ok: ${stats.extracted} | warn: ${stats.withErrors} | failed: ${stats.failed} | suspicious: ${stats.suspicious} ──\n`)
     }
   }
 
-  console.log('\nDone.')
   if (dryRun) {
-    console.log('  (DRY RUN — no changes written)')
+    // Dry run: just process first product
+    await processProduct(products[0], 0)
   } else {
-    console.log(`  Extracted:   ${extracted}`)
-    console.log(`  Warnings:    ${withErrors}`)
-    console.log(`  Failed:      ${failed}`)
-    console.log(`  Suspicious:  ${suspicious}`)
-    console.log(`  No PDF:      ${noPdf}`)
+    await runWithConcurrency(products, concurrency, processProduct)
+  }
+
+  if (!dryRun) {
+    console.log('\nDone.')
+    console.log(`  Extracted:   ${stats.extracted}`)
+    console.log(`  Warnings:    ${stats.withErrors}`)
+    console.log(`  Failed:      ${stats.failed}`)
+    console.log(`  Suspicious:  ${stats.suspicious}`)
+    console.log(`  No PDF:      ${stats.noPdf}`)
     console.log(`  Total:       ${products.length}`)
-    console.log(`  Est. cost:   ~$${(extracted * 0.004).toFixed(2)}`)
+    console.log(`  Est. cost:   ~$${(stats.extracted * 0.004).toFixed(2)}`)
   }
 }
 

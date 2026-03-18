@@ -202,7 +202,8 @@ export const searchProductsTool = tool({
 
       return { products: rows, total: rows.length }
     } catch (err) {
-      return { error: `Search failed: ${err instanceof Error ? err.message : 'Unknown error'}` }
+      console.error('[tool:search_products] Error:', err)
+      return { error: 'Search temporarily unavailable. Please try again.' }
     }
   },
 })
@@ -322,7 +323,8 @@ export const crossReferenceTool = tool({
             : 'Fixture type not classified — cross-reference unavailable',
       }
     } catch (err) {
-      return { error: `Cross-reference failed: ${err instanceof Error ? err.message : 'Unknown error'}` }
+      console.error('[tool:cross_reference] Error:', err)
+      return { error: 'Cross-reference temporarily unavailable. Please try again.' }
     }
   },
 })
@@ -364,7 +366,8 @@ export const getSpecSheetTool = tool({
         matchType,
       }
     } catch (err) {
-      return { error: `Spec sheet lookup failed: ${err instanceof Error ? err.message : 'Unknown error'}` }
+      console.error('[tool:get_spec_sheet] Error:', err)
+      return { error: 'Spec sheet lookup temporarily unavailable. Please try again.' }
     }
   },
 })
@@ -457,7 +460,8 @@ export const addToSubmittalTool = tool({
         totalItems,
       }
     } catch (err) {
-      return { error: `Failed to add to submittal: ${err instanceof Error ? err.message : 'Unknown error'}` }
+      console.error('[tool:add_to_submittal] Error:', err)
+      return { error: 'Failed to add to submittal. Please try again.' }
     }
   },
 })
@@ -548,7 +552,8 @@ export const recommendFixturesTool = tool({
         evaluatedCount: classifiedCandidates.length,
       }
     } catch (err) {
-      return { error: `Recommendation failed: ${err instanceof Error ? err.message : 'Unknown error'}` }
+      console.error('[tool:recommend_fixtures] Error:', err)
+      return { error: 'Recommendation temporarily unavailable. Please try again.' }
     }
   },
 })

@@ -11,6 +11,16 @@ interface Entry {
 
 const store = new Map<string, Entry>()
 
+// Periodically remove stale entries to prevent unbounded memory growth
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, entry] of store) {
+    if (now - entry.windowStart > WINDOW_MS * 2) {
+      store.delete(key)
+    }
+  }
+}, 60_000)
+
 export function checkRateLimit(ip: string): { allowed: boolean; retryAfterMs?: number } {
   const now = Date.now()
   const entry = store.get(ip)

@@ -1,9 +1,10 @@
 'use client'
 
-export type BadgeVariant = 'fixture' | 'dlc' | 'dlc-premium' | 'wet' | 'energy-star' | 'status-success' | 'status-partial' | 'status-failed' | 'status-suspicious'
+export type BadgeVariant = 'fixture' | 'controls' | 'dlc' | 'dlc-premium' | 'wet' | 'energy-star' | 'status-success' | 'status-partial' | 'status-failed' | 'status-suspicious'
 
 const VARIANT_STYLES: Record<BadgeVariant, { background: string; color: string }> = {
   fixture:          { background: '#e6f7f5', color: '#0d7a6e' },
+  controls:         { background: '#ede9f6', color: '#5b21b6' },
   dlc:              { background: '#e6f4ec', color: '#1a6e35' },
   'dlc-premium':    { background: '#d4edda', color: '#145a27' },
   wet:              { background: '#e3f0fc', color: '#1557a0' },

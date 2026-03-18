@@ -11,7 +11,7 @@ export default function GlobalError({ error, reset }: { error: Error; reset: () 
     <div style={{ padding: '60px 40px', textAlign: 'center' }}>
       <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Something went wrong</div>
       <div style={{ fontSize: 13, color: '#6b6b6b', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
-        {error.message || 'An unexpected error occurred.'}
+        An unexpected error occurred. Please try again.
       </div>
       <button
         onClick={reset}

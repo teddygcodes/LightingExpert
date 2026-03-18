@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import SpecSection from '@/components/SpecSection'
 import SpecBadge, { type BadgeVariant } from '@/components/SpecBadge'
+import PdfAnnotator from '@/components/PdfAnnotator'
 
 interface ProductDetailClientProps {
   product: Record<string, unknown>
@@ -127,7 +128,8 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
     ? rawSheets.filter(s => s.path || s.url)
     : specSheetPath ? [{ label: 'Spec Sheet', url: '', path: specSheetPath }] : []
   const primarySheet = sheets[0] ?? null
-  const viewerPath = primarySheet?.path ?? null
+  // Prefer locally cached specSheetPath for the annotator; fall back to sheet path from array
+  const viewerPath = specSheetPath ?? primarySheet?.path ?? null
 
   // Extraction
   const specExtractedAt = get<string>('specExtractedAt')
@@ -216,7 +218,10 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
 
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {canonicalFixtureType && (
-              <SpecBadge label={canonicalFixtureType.replace(/_/g, ' ')} variant="fixture" />
+              <SpecBadge
+                label={canonicalFixtureType.replace(/_/g, ' ')}
+                variant={canonicalFixtureType === 'CONTROLS' ? 'controls' : 'fixture'}
+              />
             )}
             {dlcPremium && <SpecBadge label="DLC Premium" variant="dlc-premium" />}
             {!dlcPremium && dlcListed && <SpecBadge label="DLC Listed" variant="dlc" />}
@@ -344,14 +349,14 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
         {sheets.length > 0 && (
           <button
-            onClick={() => setSpecExpanded(e => !e)}
+            onClick={() => setSpecExpanded(true)}
             style={{
               padding: '8px 16px', fontSize: 13, fontWeight: 500,
               background: '#fff', border: '1px solid #d0d0d0', borderRadius: 4,
               cursor: 'pointer', color: '#1a1a1a',
             }}
           >
-            {specExpanded ? '▲ Hide Spec Sheet' : '▼ View Spec Sheet PDF'}
+            Spec Sheet
           </button>
         )}
         <button
@@ -371,28 +376,60 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
         )}
       </div>
 
-      {/* ── Spec sheet inline iframe ── */}
-      {specExpanded && viewerPath && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-            <a href={viewerPath} target="_blank" rel="noopener noreferrer"
-              style={{ fontSize: 12, color: '#888', textDecoration: 'none' }}>
-              Open in new tab ↗
-            </a>
+      {/* ── Spec sheet modal overlay ── */}
+      {specExpanded && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', flexDirection: 'column',
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setSpecExpanded(false) }}
+        >
+          <div
+            style={{
+              position: 'relative', flex: 1, margin: '32px',
+              background: '#fff', borderRadius: 8, overflow: 'hidden',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            {/* Modal header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 16px', borderBottom: '1px solid #e8e8e8', flexShrink: 0,
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>
+                {catalogNumber} — Spec Sheet
+              </span>
+              <button
+                onClick={() => setSpecExpanded(false)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 20, color: '#888', lineHeight: 1, padding: '0 4px',
+                }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Annotator or fallback */}
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              {viewerPath
+                ? <PdfAnnotator pdfUrl={viewerPath} />
+                : primarySheet?.url
+                  ? (
+                    <div style={{ padding: 24 }}>
+                      <a href={primarySheet.url} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 13, color: '#d13438' }}>
+                        Open spec sheet ↗
+                      </a>
+                    </div>
+                  )
+                  : <div style={{ padding: 24, color: '#888', fontSize: 13 }}>No spec sheet available.</div>
+              }
+            </div>
           </div>
-          <iframe
-            src={viewerPath}
-            style={{ width: '100%', height: '80vh', border: '1px solid #e8e8e8', borderRadius: 4 }}
-            title="Spec Sheet"
-          />
-        </div>
-      )}
-      {specExpanded && !viewerPath && primarySheet?.url && (
-        <div style={{ marginBottom: 20 }}>
-          <a href={primarySheet.url} target="_blank" rel="noopener noreferrer"
-            style={{ fontSize: 13, color: '#d13438' }}>
-            Open spec sheet ↗
-          </a>
         </div>
       )}
 
