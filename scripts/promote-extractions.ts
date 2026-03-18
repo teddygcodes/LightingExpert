@@ -135,6 +135,19 @@ function convertForDb(jsonKey: string, value: unknown): unknown {
     return types.length > 0 ? types : null
   }
 
+  // nemaRating, ipRating: DB is String? — join arrays to comma-separated string
+  const SCALAR_STRING_FIELDS = ['nemaRating', 'ipRating']
+  if (SCALAR_STRING_FIELDS.includes(jsonKey) && Array.isArray(value)) {
+    const joined = (value as unknown[]).join(', ')
+    return joined.length > 0 ? joined : null
+  }
+
+  // opticalDistribution, applications: DB is String[] — keep as array
+  const STRING_ARRAY_FIELDS = ['opticalDistribution', 'applications']
+  if (STRING_ARRAY_FIELDS.includes(jsonKey) && !Array.isArray(value)) {
+    return [String(value)]
+  }
+
   return value
 }
 
