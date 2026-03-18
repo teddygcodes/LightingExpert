@@ -140,6 +140,25 @@ export async function searchProducts(params: SearchProductsParams): Promise<Sear
     where.wetLocation = true
   }
 
+  // Form factor tokens (e.g. "2x4", "1x4", "2x2") — these match the formFactor field,
+  // not tsvector, because configurable products like CPX store "1X4, 2X2, 2X4" in
+  // formFactor but tsvector only covers catalog/family/description text.
+  if (params.query) {
+    const FORM_FACTOR_RE = /^\d+x\d+$/i
+    const formFactorTokens = params.query.split(/\s+/).filter(t => FORM_FACTOR_RE.test(t))
+    if (formFactorTokens.length > 0) {
+      const nonFFQuery = params.query.split(/\s+/).filter(t => !FORM_FACTOR_RE.test(t)).join(' ')
+      // Add a formFactor filter: product must contain the form factor token (e.g. "2X4")
+      const ffClauses = formFactorTokens.map(t =>
+        ({ formFactor: { contains: t, mode: 'insensitive' as const } })
+      )
+      if (!Array.isArray(where.AND)) where.AND = []
+      ;(where.AND as Prisma.ProductWhereInput[]).push({ OR: ffClauses })
+      // Replace params.query with the remaining non-form-factor tokens
+      params = { ...params, query: nonFFQuery || undefined }
+    }
+  }
+
   // Free-text query: try manufacturer-prefixed 3-bucket, then tsvector
   if (params.query) {
     const tokens = params.query.split(/\s+/).filter(Boolean)
