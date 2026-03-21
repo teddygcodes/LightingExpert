@@ -157,6 +157,8 @@ const recommendFixturesSchema = z.object({
   wetLocation: z.boolean().optional(),
   manufacturerSlug: z.string().optional()
     .describe('Filter to a specific manufacturer by slug (e.g. "acuity", "elite"). Also disables cross-manufacturer diversity logic — use when the user explicitly names a brand.'),
+  query: z.string().optional()
+    .describe('Form factor or size token (e.g. "2x4", "2x2", "1x4"). Pass this when the user specifies a physical size so only that form factor is considered. Do NOT pass general text here — use fixtureType for fixture class.'),
   limit: z.number().min(1).max(5).optional().describe('Top N results to return. Default 3, max 5.'),
 })
 
@@ -493,6 +495,7 @@ export const recommendFixturesTool = tool({
         wetLocation: params.wetLocation,
         maxWattage: ctx.maxWattage,
         manufacturerSlug: params.manufacturerSlug,
+        query: params.query,  // form factor token (e.g. "2x4") — filters to that size only
         limit: 50,  // internal — allows scoring across full pool
       })
 
