@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { Prisma } from '@prisma/client'
 
 interface MatrixRow {
@@ -29,7 +29,7 @@ interface SkuEntry {
   housing?: string | null
   shortCode?: string | null
   isCommon?: boolean
-  position?: number
+  position: number
 }
 
 interface ColumnDef {
@@ -177,11 +177,11 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
             const skuEntries = Array.isArray(m.skuTable)
               ? (m.skuTable as unknown as SkuEntry[])
               : []
+            const sortedSkuEntries = [...skuEntries].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
 
             return (
-              <>
+              <React.Fragment key={m.id}>
                 <tr
-                  key={m.id}
                   style={{ background: idx % 2 === 0 ? '#fff' : '#f9f9f9', cursor: 'pointer' }}
                   onClick={() => setExpanded(isExpanded ? null : m.id)}
                 >
@@ -303,7 +303,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {skuEntries.map((entry, i) => (
+                                  {sortedSkuEntries.map((entry, i) => (
                                     <tr key={i} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
                                       <td style={{ fontFamily: 'monospace', fontWeight: 600, padding: '4px 6px', border: '1px solid #e8e8e8' }}>{entry.stockPartNumber}</td>
                                       <td style={{ padding: '4px 6px', border: '1px solid #e8e8e8' }}>{entry.lumens ?? '—'}</td>
@@ -370,7 +370,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                     </td>
                   </tr>
                 )}
-              </>
+              </React.Fragment>
             )
           })}
         </tbody>
