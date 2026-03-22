@@ -91,7 +91,7 @@ export async function POST(
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
+    max_tokens: 8192,
     messages: [{
       role: 'user',
       content: buildExtractionPrompt(best.rawSpecText!, matrix.familyName, best.catalogNumber),
@@ -127,18 +127,6 @@ export async function POST(
   const presenceError = validateMatrixFieldPresence(matrixType, hasColumns, hasSkuTable)
   if (presenceError) {
     return NextResponse.json({ error: presenceError }, { status: 422 })
-  }
-
-  // Per-type additional validation
-  if (matrixType === 'configurable' || matrixType === 'hybrid') {
-    if (!hasColumns) {
-      return NextResponse.json({ error: 'Claude returned no columns — extraction failed' }, { status: 422 })
-    }
-  }
-  if (matrixType === 'sku_table' || matrixType === 'hybrid') {
-    if (!hasSkuTable) {
-      return NextResponse.json({ error: 'Claude returned no skuEntries — extraction failed' }, { status: 422 })
-    }
   }
 
   // Map lowercase matrixType to uppercase Prisma enum

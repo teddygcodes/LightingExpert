@@ -61,6 +61,9 @@ export async function PUT(req: NextRequest) {
       if (typeof entry.stockPartNumber !== 'string' || !entry.stockPartNumber) {
         return NextResponse.json({ error: 'Each skuTable entry must have a stockPartNumber string' }, { status: 400 })
       }
+      if (typeof entry.position !== 'number' || entry.position <= 0) {
+        return NextResponse.json({ error: 'Each skuTable entry must have a numeric position > 0' }, { status: 400 })
+      }
     }
   }
 
@@ -76,7 +79,7 @@ export async function PUT(req: NextRequest) {
       matrixType: dbMatrixType,
       columns: hasColumns ? (columns as Prisma.InputJsonValue) : Prisma.JsonNull,
       suffixOptions: suffixOptions ? (suffixOptions as Prisma.InputJsonValue) : Prisma.JsonNull,
-      skuTable: skuTableData ? (skuTableData as Prisma.InputJsonValue) : Prisma.JsonNull,
+      skuTable: hasSkuTable ? (skuTableData as Prisma.InputJsonValue) : Prisma.JsonNull,
       sampleNumber: sampleNumber ?? null,
       confidence: confidence ?? 0.8,
       extractionSource: 'MANUAL',
