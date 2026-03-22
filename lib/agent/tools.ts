@@ -169,6 +169,7 @@ export const searchProductsTool = tool({
     'Search the lighting product database. Use this to find fixtures matching specific requirements like application type, lumen output, wattage, CCT, manufacturer, or category. Also use for catalog number lookups. Provide EITHER a free-text query OR at least one structured filter — or both.',
   parameters: searchProductsSchema,
   execute: async (params: z.infer<typeof searchProductsSchema>) => {
+    console.log('[search_products] params:', JSON.stringify(params))
     try {
       const hasFilter =
         params.query ||

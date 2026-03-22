@@ -30,6 +30,11 @@ const args = process.argv.slice(2)
 const manufacturerArg = args.find((a) => a.startsWith('--manufacturer='))
 const manufacturer = manufacturerArg ? manufacturerArg.replace('--manufacturer=', '').trim() : 'elite'
 
+const familiesArg = args.find((a) => a.startsWith('--families='))
+const familiesToCrawl = familiesArg
+  ? familiesArg.replace('--families=', '').split(',').map(s => s.trim()).filter(Boolean)
+  : undefined
+
 const categoriesArg = args.find((a) => a.startsWith('--categories='))
 const defaultCategories = manufacturer === 'acuity'
   ? Object.keys(ACUITY_ROOT_CATEGORY_PATHS)
@@ -169,7 +174,7 @@ async function run() {
     } else if (manufacturer === 'lutron') {
       products = await crawlLutron(categories)
     } else {
-      products = await crawlElite(categories)
+      products = await crawlElite(categories, familiesToCrawl)
     }
     stats.found = products.length
 
