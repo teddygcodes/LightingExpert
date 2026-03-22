@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { buildCatalogString, parseExistingCatalog } from '@/lib/configurator'
-import type { OrderingMatrixData } from '@/lib/configurator'
+import type { OrderingMatrixData, SkuTableEntry } from '@/lib/configurator'
 
 interface Props {
   productId: string
@@ -19,6 +19,11 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
   const [suffixSelections, setSuffixSelections] = useState<string[]>([])
   const [parseWarning, setParseWarning] = useState<string | null>(null)
 
+  // New state for sku_table / hybrid branches
+  const [selectedSku, setSelectedSku] = useState<string | null>(null)
+  const [hybridMode, setHybridMode] = useState<'sku' | 'custom'>('sku')
+  const [customBuilderOpen, setCustomBuilderOpen] = useState(false)
+
   useEffect(() => {
     fetch(`/api/products/${productId}/configurator`)
       .then(r => {
@@ -30,7 +35,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
         const m = data.matrix as OrderingMatrixData
         setMatrix(m)
 
-        // Initialize defaults: isDefault option or first option per column
+        // Initialize column defaults: isDefault option or first option per column
         const defaults: Record<string, string> = {}
         const sorted = [...m.columns].sort((a, b) => a.position - b.position)
         for (const col of sorted) {
@@ -38,24 +43,39 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
           if (def) defaults[String(col.position)] = def.code
         }
 
-        // If currentOverride exists, try to parse it back into selections
+        // Three-step override parsing hierarchy
         if (currentOverride) {
-          const parsed = parseExistingCatalog(currentOverride, m)
-          if (parsed.confidence >= 0.5) {
-            // Merge parsed selections over defaults
-            setColumnSelections({ ...defaults, ...parsed.columnSelections })
-            setSuffixSelections(parsed.suffixSelections)
-            if (parsed.unparsed.length > 0) {
-              setParseWarning(`Some segments could not be matched: ${parsed.unparsed.join(', ')}`)
-            }
-          } else {
-            // Low confidence parse — use defaults but warn user
+          // Step 1: Exact SKU match
+          const exactSkuEntry = (m.skuEntries ?? []).find(
+            entry => entry.stockPartNumber === currentOverride
+          )
+          if (exactSkuEntry) {
+            setSelectedSku(currentOverride)
+            setHybridMode('sku')
             setColumnSelections(defaults)
-            setParseWarning(`Could not parse "${currentOverride}" into this matrix (${Math.round(parsed.confidence * 100)}% match). Showing defaults — save to overwrite.`)
+          } else {
+            // Step 2: Column parse
+            const parsed = parseExistingCatalog(currentOverride, m)
+            if (parsed.confidence >= 0.5) {
+              setColumnSelections({ ...defaults, ...parsed.columnSelections })
+              setSuffixSelections(parsed.suffixSelections)
+              if (m.matrixType === 'hybrid') {
+                setHybridMode('custom')
+                setCustomBuilderOpen(true)
+              }
+              if (parsed.unparsed.length > 0) {
+                setParseWarning(`Some segments could not be matched: ${parsed.unparsed.join(', ')}`)
+              }
+            } else {
+              // Step 3: No match — use defaults, warn if there was a currentOverride
+              setColumnSelections(defaults)
+              setParseWarning(`Could not parse "${currentOverride}" into this matrix (${Math.round(parsed.confidence * 100)}% match). Showing defaults — save to overwrite.`)
+            }
           }
         } else {
           setColumnSelections(defaults)
         }
+
         setLoading(false)
       })
       .catch(() => {
@@ -76,6 +96,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
 
   const result = buildCatalogString(matrix, columnSelections, suffixSelections)
   const sorted = [...matrix.columns].sort((a, b) => a.position - b.position)
+  const sortedSkuEntries = [...(matrix.skuEntries ?? [])].sort((a, b) => a.position - b.position)
 
   function toggleSuffix(code: string) {
     setSuffixSelections(prev =>
@@ -104,6 +125,339 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
     whiteSpace: 'nowrap',
   }
 
+  // --- Reusable pieces ---
+
+  /** Card list for SKU quick-picks (used by both sku_table and hybrid branches) */
+  function SkuCardList({ onSelect }: { onSelect: (sku: string) => void }) {
+    return (
+      <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
+        {sortedSkuEntries.map(entry => {
+          const isSelected = selectedSku === entry.stockPartNumber
+          return (
+            <div
+              key={entry.stockPartNumber}
+              onClick={() => onSelect(entry.stockPartNumber)}
+              style={{
+                position: 'relative',
+                border: isSelected ? '2px solid #1a1a1a' : '1px solid #d0d0d0',
+                borderRadius: 6,
+                padding: '8px 10px',
+                background: isSelected ? '#e8f4fd' : '#fff',
+                cursor: 'pointer',
+                transition: 'border-color 0.1s, background 0.1s',
+              }}
+            >
+              {entry.isCommon && (
+                <span style={{
+                  position: 'absolute',
+                  top: 6,
+                  right: 8,
+                  background: '#c0392b',
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  borderRadius: 10,
+                  padding: '1px 7px',
+                  letterSpacing: '0.03em',
+                }}>
+                  Popular
+                </span>
+              )}
+              <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#000', marginBottom: 5, paddingRight: entry.isCommon ? 60 : 0 }}>
+                {entry.stockPartNumber}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {entry.lumens && <SpecPill label="Lumens" value={entry.lumens} />}
+                {entry.watts && <SpecPill label="Watts" value={entry.watts} />}
+                {entry.cct && <SpecPill label="CCT" value={entry.cct} />}
+                {entry.voltage && <SpecPill label="Voltage" value={entry.voltage} />}
+                {entry.housing && <SpecPill label="Housing" value={entry.housing} />}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  function SpecPill({ label, value }: { label: string; value: string }) {
+    return (
+      <span style={{
+        background: '#f0f0f0',
+        fontSize: 11,
+        borderRadius: 3,
+        padding: '2px 6px',
+        color: '#444',
+        whiteSpace: 'nowrap',
+      }}>
+        {label}: {value}
+      </span>
+    )
+  }
+
+  /** Preview dark box */
+  function PreviewBox({ value }: { value: string }) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: '8px 12px', background: '#1a1a1a', borderRadius: 6, fontSize: 13 }}>
+        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: value ? '#fff' : '#888', letterSpacing: '0.05em', flex: 1 }}>
+          {value || '—'}
+        </span>
+      </div>
+    )
+  }
+
+  /** Column dropdowns + suffix checkboxes (configurable / hybrid custom builder) */
+  function ColumnBuilder() {
+    return (
+      <>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', marginBottom: 12 }}>
+          {sorted.map(col => (
+            <div key={col.position}>
+              <label style={labelStyle}>
+                {col.shortLabel}{col.required ? ' *' : ''}
+              </label>
+              {col.options.length === 1 ? (
+                <div style={{ ...inputStyle, color: '#888', background: '#f0f0f0', padding: '4px 8px' }}>
+                  {col.options[0].code}
+                </div>
+              ) : (
+                <select
+                  value={columnSelections[String(col.position)] ?? ''}
+                  onChange={e => setColumnSelections(prev => ({ ...prev, [String(col.position)]: e.target.value }))}
+                  style={{ ...inputStyle, border: '1px solid #ccc' }}
+                  onFocus={e => (e.currentTarget.style.borderColor = '#0078d4')}
+                  onBlur={e => (e.currentTarget.style.borderColor = '#ccc')}
+                >
+                  <option value="">— select —</option>
+                  {col.options.map(opt => (
+                    <option key={opt.code} value={opt.code}>
+                      {opt.code} — {opt.description}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {!result.isComplete && result.missingColumns.length > 0 && (
+          <div style={{ fontSize: 11, color: '#c0392b', marginBottom: 8 }}>
+            Missing: {result.missingColumns.join(', ')}
+          </div>
+        )}
+
+        {result.warnings.length > 0 && (
+          <div style={{ fontSize: 11, color: '#e67e22', marginBottom: 8 }}>
+            {result.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
+          </div>
+        )}
+
+        {matrix!.suffixOptions && matrix!.suffixOptions.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+              Options (Add as Suffix)
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {matrix!.suffixOptions.map(suf => (
+                <label key={suf.code} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={suffixSelections.includes(suf.code)}
+                    onChange={() => toggleSuffix(suf.code)}
+                    style={{ margin: 0 }}
+                  />
+                  <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#d13438' }}>{suf.code}</span>
+                  <span style={{ color: '#555' }}>— {suf.description}</span>
+                  {suf.notes && <span style={{ color: '#888', fontSize: 11 }}>({suf.notes})</span>}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+
+  // --- Shared header ---
+  const header = (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 700 }}>
+        Configure: {matrix.baseFamily}
+        {matrix.sampleNumber && (
+          <span style={{ fontSize: 11, fontWeight: 400, color: '#6b6b6b', marginLeft: 8 }}>
+            Sample: {matrix.sampleNumber}
+          </span>
+        )}
+      </div>
+      <button
+        onClick={onClose}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888', fontSize: 16, lineHeight: 1, padding: '0 4px' }}
+      >×</button>
+    </div>
+  )
+
+  const warningBanner = parseWarning && (
+    <div style={{ fontSize: 11, color: '#c0392b', background: '#fdf2f2', border: '1px solid #f4c2c2', padding: '6px 10px', marginBottom: 10 }}>
+      {parseWarning}
+    </div>
+  )
+
+  // =========================================================================
+  // Branch: sku_table
+  // =========================================================================
+  if (matrix.matrixType === 'sku_table') {
+    return (
+      <div style={{ background: '#f9f9f9', border: '1px solid #e0e0e0', padding: '14px 16px' }}>
+        {header}
+        {warningBanner}
+
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+          Select a pre-built configuration
+        </div>
+
+        <SkuCardList onSelect={sku => setSelectedSku(sku)} />
+
+        <div style={{ marginTop: 12 }}>
+          <PreviewBox value={selectedSku ?? ''} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => selectedSku && onCatalogBuilt(selectedSku, true)}
+            disabled={!selectedSku}
+            style={{
+              background: selectedSku ? '#c0392b' : '#ccc',
+              color: '#fff',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: 4,
+              fontWeight: 600,
+              cursor: selectedSku ? 'pointer' : 'not-allowed',
+              opacity: selectedSku ? 1 : 0.5,
+            }}
+          >
+            Save Selection
+          </button>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: '1px solid #ccc', padding: '7px 12px', fontSize: 13, cursor: 'pointer', color: '#444', borderRadius: 4 }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // Branch: hybrid
+  // =========================================================================
+  if (matrix.matrixType === 'hybrid') {
+    const previewValue = hybridMode === 'sku' ? (selectedSku ?? '') : (result.catalogString ?? '')
+
+    return (
+      <div style={{ background: '#f9f9f9', border: '1px solid #e0e0e0', padding: '14px 16px' }}>
+        {header}
+        {warningBanner}
+
+        {/* Section 1: Quick picks */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+          Common configurations
+        </div>
+        <SkuCardList
+          onSelect={sku => {
+            setSelectedSku(sku)
+            setHybridMode('sku')
+          }}
+        />
+
+        {/* Separator */}
+        <div style={{ borderTop: '1px solid #d0d0d0', margin: '14px 0' }} />
+
+        {/* Section 2: Custom builder toggle */}
+        <button
+          onClick={() => {
+            const willOpen = !customBuilderOpen
+            setCustomBuilderOpen(willOpen)
+            if (willOpen) setHybridMode('custom')
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 700,
+            color: '#333',
+            padding: '0 0 8px 0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{customBuilderOpen ? '▾' : '▸'}</span>
+          Build custom configuration
+        </button>
+
+        {customBuilderOpen && (
+          <div style={{ marginBottom: 8 }}>
+            <ColumnBuilder />
+          </div>
+        )}
+
+        {/* Preview */}
+        <PreviewBox value={previewValue} />
+
+        {/* Buttons */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {hybridMode === 'sku' ? (
+            <button
+              onClick={() => selectedSku && onCatalogBuilt(selectedSku, true)}
+              disabled={!selectedSku}
+              style={{
+                background: selectedSku ? '#c0392b' : '#ccc',
+                color: '#fff',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: 4,
+                fontWeight: 600,
+                cursor: selectedSku ? 'pointer' : 'not-allowed',
+                opacity: selectedSku ? 1 : 0.5,
+              }}
+            >
+              Save Selection
+            </button>
+          ) : (
+            <button
+              onClick={() => onCatalogBuilt(result.catalogString, result.isComplete)}
+              disabled={!result.catalogString}
+              style={{
+                background: result.catalogString ? '#c0392b' : '#ccc',
+                color: '#fff',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: 4,
+                fontWeight: 600,
+                cursor: result.catalogString ? 'pointer' : 'not-allowed',
+                opacity: result.catalogString ? 1 : 0.5,
+              }}
+            >
+              Save Configuration
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: '1px solid #ccc', padding: '7px 12px', fontSize: 13, cursor: 'pointer', color: '#444', borderRadius: 4 }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // Branch: configurable (default — unchanged)
+  // =========================================================================
   return (
     <div style={{ background: '#f9f9f9', border: '1px solid #e0e0e0', padding: '14px 16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
