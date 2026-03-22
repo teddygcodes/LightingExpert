@@ -12,7 +12,7 @@
 //   npm run extract-matrices -- --force                # re-extract even if matrix exists
 
 import * as dotenv from 'dotenv'
-dotenv.config()
+dotenv.config({ override: true })
 
 import { prisma } from '../lib/db'
 import Anthropic from '@anthropic-ai/sdk'

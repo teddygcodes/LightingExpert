@@ -458,6 +458,7 @@ export async function findMatches(
       manufacturerId: { not: source.manufacturerId },
       ...(targetManufacturerSlug ? { manufacturer: { slug: targetManufacturerSlug } } : {}),
     },
+    take: 50,
     include: {
       manufacturer: { select: { name: true, slug: true } },
       category: catSelect,
@@ -470,6 +471,7 @@ export async function findMatches(
 
   const matches: CrossRefMatch[] = []
   const rejects: CrossRefReject[] = []
+  const upserts: Parameters<typeof prisma.crossReference.upsert>[0][] = []
 
   for (const target of candidates) {
     const reject = runHardRejects(source, target)
@@ -491,23 +493,23 @@ export async function findMatches(
       ? MatchType.BUDGET_ALTERNATIVE
       : determineMatchType(score, source, target)
     const snapshot = buildComparisonSnapshot(source, target)
+    const matchReason = reasons.slice(0, 3).join('; ')
 
-    // Persist to CrossReference table
-    await prisma.crossReference.upsert({
+    upserts.push({
       where: { sourceProductId_targetProductId: { sourceProductId: sourceId, targetProductId: target.id } },
       create: {
         sourceProductId: sourceId,
         targetProductId: target.id,
         matchType,
         confidence: score,
-        matchReason: reasons.slice(0, 3).join('; '),
+        matchReason,
         comparisonSnapshot: snapshot as unknown as Prisma.InputJsonValue,
         source: CrossRefSource.RULE_BASED,
       },
       update: {
         matchType,
         confidence: score,
-        matchReason: reasons.slice(0, 3).join('; '),
+        matchReason,
         comparisonSnapshot: snapshot as unknown as Prisma.InputJsonValue,
       },
     })
@@ -519,10 +521,13 @@ export async function findMatches(
       manufacturerSlug: target.manufacturer.slug,
       confidence: score,
       matchType,
-      matchReason: reasons.slice(0, 3).join('; '),
+      matchReason,
       comparisonSnapshot: snapshot,
     })
   }
+
+  // Batch all upserts in parallel instead of sequential awaits
+  await Promise.all(upserts.map((args) => prisma.crossReference.upsert(args)))
 
   // Sort by confidence descending
   matches.sort((a, b) => b.confidence - a.confidence)

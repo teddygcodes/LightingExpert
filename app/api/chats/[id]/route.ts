@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { requireAuth } from '@/lib/auth'
 
 // GET /api/chats/[id] — load chat with messages
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -11,6 +12,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // PATCH /api/chats/[id] — update title, messages, projectId
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = await requireAuth()
+  if (authError) return authError
+
   const { id } = await params
   const body = await req.json().catch(() => ({}))
   const data: Record<string, unknown> = {}
@@ -28,6 +32,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 // DELETE /api/chats/[id]
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = await requireAuth()
+  if (authError) return authError
+
   const { id } = await params
   await prisma.chat.delete({ where: { id } })
   return new NextResponse(null, { status: 204 })

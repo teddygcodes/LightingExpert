@@ -66,6 +66,13 @@ export default function SubmittalDetailClient({ initial }: { initial: Submittal 
           {generating ? 'Generating PDF…' : 'Generate PDF Package'}
         </button>
 
+        <a
+          href={`/submittals/${submittal.id}/edit`}
+          style={{ color: '#0078d4', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}
+        >
+          Edit Schedule →
+        </a>
+
         {submittal.pdfUrl && (
           <a
             href={submittal.pdfUrl}

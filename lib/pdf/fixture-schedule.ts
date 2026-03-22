@@ -1,126 +1,192 @@
-import { PDFDocument, PDFPage, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, PDFPage, PDFFont, rgb } from 'pdf-lib'
+
+const BLACK = rgb(0, 0, 0)
+const DARK = rgb(0.1, 0.1, 0.1)
+const LIGHT_GRAY = rgb(0.93, 0.93, 0.93)
 
 export interface ScheduleRow {
   type: string
   qty: number
   manufacturer: string
   catalogNumber: string
-  description: string
   watts: string
   lumens: string
   cct: string
-  cri: string
   voltage: string
-  ipNema: string
-  mounting: string
   location: string
-  notes: string
 }
 
-const BLACK = rgb(0, 0, 0)
-const GRAY = rgb(0.42, 0.42, 0.42)
-const LIGHT_GRAY = rgb(0.95, 0.95, 0.95)
-const RED = rgb(0.82, 0.20, 0.22)
-
+// Portrait letter (612 × 792)
+// 9 columns, full-width grid, margins 36 each side → usable width 540
 const COLS = [
-  { label: 'TYPE', x: 20, w: 28 },
-  { label: 'QTY', x: 50, w: 24 },
-  { label: 'MFR', x: 76, w: 54 },
-  { label: 'CATALOG #', x: 132, w: 80 },
-  { label: 'DESCRIPTION', x: 214, w: 90 },
-  { label: 'W', x: 306, w: 28 },
-  { label: 'LM', x: 336, w: 38 },
-  { label: 'CCT', x: 376, w: 36 },
-  { label: 'CRI', x: 414, w: 24 },
-  { label: 'V', x: 440, w: 36 },
-  { label: 'IP/NEMA', x: 478, w: 42 },
-  { label: 'MNT', x: 522, w: 32 },
-  { label: 'LOCATION', x: 556, w: 56 },
-]
+  { label: 'TYPE',      key: 'type',         x: 36,  w: 36  },
+  { label: 'QTY',       key: 'qty',          x: 72,  w: 32  },
+  { label: 'MANUFACTURER', key: 'manufacturer', x: 104, w: 108 },
+  { label: 'CATALOG #', key: 'catalogNumber', x: 212, w: 128 },
+  { label: 'WATTS',     key: 'watts',        x: 340, w: 48  },
+  { label: 'LUMENS',    key: 'lumens',       x: 388, w: 52  },
+  { label: 'CCT',       key: 'cct',          x: 440, w: 44  },
+  { label: 'VOLTAGE',   key: 'voltage',      x: 484, w: 44  },
+  { label: 'LOCATION',  key: 'location',     x: 528, w: 84  }, // extends to 612
+] as const
 
-function drawHeader(page: PDFPage, bold: ReturnType<PDFDocument['embedFont']> extends Promise<infer R> ? R : never, y: number, pageNum: number) {
-  page.drawRectangle({ x: 10, y: y - 2, width: 790, height: 16, color: rgb(0.1, 0.1, 0.1) })
+const PAGE_W = 612
+const PAGE_H = 792
+const MARGIN_TOP = 752  // top of usable area (below header/footer reserved area)
+const MARGIN_BOTTOM = 52 // bottom of usable area (above footer reserved area)
+const HEADER_H = 22
+const ROW_H = 18
+const TABLE_LEFT = 36
+const TABLE_RIGHT = 576
+
+function truncate(s: string, maxChars: number): string {
+  return s.length > maxChars ? s.slice(0, maxChars - 1) + '…' : s
+}
+
+function drawTableHeader(page: PDFPage, y: number, bold: PDFFont): void {
+  page.drawRectangle({
+    x: TABLE_LEFT,
+    y: y - 4,
+    width: TABLE_RIGHT - TABLE_LEFT,
+    height: HEADER_H,
+    color: DARK,
+  })
   for (const col of COLS) {
-    page.drawText(col.label, { x: col.x, y, font: bold, size: 7, color: rgb(1, 1, 1) })
+    const maxChars = Math.max(3, Math.floor(col.w / 5.5))
+    page.drawText(truncate(col.label, maxChars), {
+      x: col.x + 3,
+      y: y + 4,
+      font: bold,
+      size: 8,
+      color: rgb(1, 1, 1),
+    })
   }
-  page.drawText(`FIXTURE SCHEDULE — Page ${pageNum}`, { x: 620, y, font: bold, size: 7, color: rgb(0.7, 0.7, 0.7) })
 }
 
-function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max - 1) + '…' : s
+function drawGridLines(page: PDFPage, y: number): void {
+  // Horizontal bottom rule for this row
+  page.drawLine({
+    start: { x: TABLE_LEFT, y: y - 4 },
+    end: { x: TABLE_RIGHT, y: y - 4 },
+    thickness: 0.25,
+    color: LIGHT_GRAY,
+  })
+  // Vertical column dividers
+  for (let i = 1; i < COLS.length; i++) {
+    page.drawLine({
+      start: { x: COLS[i].x, y: y - 4 },
+      end: { x: COLS[i].x, y: y + ROW_H - 4 },
+      thickness: 0.25,
+      color: LIGHT_GRAY,
+    })
+  }
 }
 
-export async function buildFixtureSchedule(
-  doc: PDFDocument,
-  rows: ScheduleRow[]
-): Promise<void> {
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
-  const regular = await doc.embedFont(StandardFonts.Helvetica)
+export function buildFixtureSchedule(
+  pdfDoc: PDFDocument,
+  rows: ScheduleRow[],
+  fonts: { regular: PDFFont; bold: PDFFont }
+): PDFPage[] {
+  const { regular, bold } = fonts
+  const pages: PDFPage[] = []
 
-  // Landscape letter: 792 x 612
-  const PAGE_W = 792
-  const PAGE_H = 612
-  const ROW_H = 14
-  const HEADER_H = 18
-  const MARGIN_TOP = 580
-  const MARGIN_BOTTOM = 30
+  let page = pdfDoc.addPage([PAGE_W, PAGE_H])
+  pages.push(page)
 
-  let page = doc.addPage([PAGE_W, PAGE_H])
   let y = MARGIN_TOP
-  let pageNum = 2 // page 1 is cover sheet
-
-  drawHeader(page, bold, y, pageNum)
+  drawTableHeader(page, y, bold)
   y -= HEADER_H
 
+  // Outer border top
+  page.drawLine({
+    start: { x: TABLE_LEFT, y: MARGIN_TOP + HEADER_H - 4 },
+    end: { x: TABLE_RIGHT, y: MARGIN_TOP + HEADER_H - 4 },
+    thickness: 0.5,
+    color: BLACK,
+  })
+
   for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]
-
     // New page if needed
-    if (y < MARGIN_BOTTOM + ROW_H) {
-      // Footer
-      page.drawLine({ start: { x: 10, y: 20 }, end: { x: 782, y: 20 }, thickness: 0.5, color: LIGHT_GRAY })
-      page.drawText('Atlantis KB — Lighting Expert', { x: 10, y: 8, font: regular, size: 7, color: GRAY })
+    if (y - ROW_H < MARGIN_BOTTOM) {
+      // Close border on current page
+      page.drawLine({
+        start: { x: TABLE_LEFT, y: y + ROW_H - 4 },
+        end: { x: TABLE_RIGHT, y: y + ROW_H - 4 },
+        thickness: 0.5,
+        color: BLACK,
+      })
 
-      page = doc.addPage([PAGE_W, PAGE_H])
-      pageNum++
+      page = pdfDoc.addPage([PAGE_W, PAGE_H])
+      pages.push(page)
       y = MARGIN_TOP
-      drawHeader(page, bold, y, pageNum)
+      drawTableHeader(page, y, bold)
       y -= HEADER_H
+
+      page.drawLine({
+        start: { x: TABLE_LEFT, y: MARGIN_TOP + HEADER_H - 4 },
+        end: { x: TABLE_RIGHT, y: MARGIN_TOP + HEADER_H - 4 },
+        thickness: 0.5,
+        color: BLACK,
+      })
     }
+
+    const row = rows[i]
 
     // Alternating row background
     if (i % 2 === 0) {
-      page.drawRectangle({ x: 10, y: y - 2, width: 782, height: ROW_H, color: LIGHT_GRAY })
+      page.drawRectangle({
+        x: TABLE_LEFT,
+        y: y - 4,
+        width: TABLE_RIGHT - TABLE_LEFT,
+        height: ROW_H,
+        color: LIGHT_GRAY,
+      })
     }
 
+    // Row data
     const rowData: Record<string, string> = {
       type: row.type,
       qty: String(row.qty),
       manufacturer: row.manufacturer,
       catalogNumber: row.catalogNumber,
-      description: row.description,
       watts: row.watts,
       lumens: row.lumens,
       cct: row.cct,
-      cri: row.cri,
       voltage: row.voltage,
-      ipNema: row.ipNema,
-      mounting: row.mounting,
       location: row.location,
     }
 
-    const colKeys = ['type','qty','manufacturer','catalogNumber','description','watts','lumens','cct','cri','voltage','ipNema','mounting','location']
+    for (const col of COLS) {
+      const val = rowData[col.key] ?? ''
+      const maxChars = Math.max(2, Math.floor(col.w / 5.2))
+      page.drawText(truncate(val, maxChars), {
+        x: col.x + 3,
+        y: y + 3,
+        font: regular,
+        size: 8,
+        color: BLACK,
+      })
+    }
 
-    COLS.forEach((col, idx) => {
-      const val = rowData[colKeys[idx]] || ''
-      const maxChars = Math.floor(col.w / 5)
-      page.drawText(truncate(val, maxChars), { x: col.x, y, font: regular, size: 7, color: BLACK })
-    })
-
+    drawGridLines(page, y)
     y -= ROW_H
   }
 
-  // Final footer
-  page.drawLine({ start: { x: 10, y: 20 }, end: { x: 782, y: 20 }, thickness: 0.5, color: LIGHT_GRAY })
-  page.drawText('Atlantis KB — Lighting Expert', { x: 10, y: 8, font: regular, size: 7, color: GRAY })
+  // Close border on last page
+  page.drawLine({
+    start: { x: TABLE_LEFT, y: y + ROW_H - 4 },
+    end: { x: TABLE_RIGHT, y: y + ROW_H - 4 },
+    thickness: 0.5,
+    color: BLACK,
+  })
+
+  // Left and right outer borders on all pages
+  for (const p of pages) {
+    const topY = MARGIN_TOP + HEADER_H - 4
+    const botY = MARGIN_BOTTOM
+    page.drawLine({ start: { x: TABLE_LEFT, y: topY }, end: { x: TABLE_LEFT, y: botY }, thickness: 0.5, color: BLACK })
+    page.drawLine({ start: { x: TABLE_RIGHT, y: topY }, end: { x: TABLE_RIGHT, y: botY }, thickness: 0.5, color: BLACK })
+  }
+
+  return pages
 }
