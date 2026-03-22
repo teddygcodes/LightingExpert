@@ -15,7 +15,9 @@ import * as dotenv from 'dotenv'
 dotenv.config({ override: true })
 
 import { prisma } from '../lib/db'
+import { Prisma } from '@prisma/client'
 import Anthropic from '@anthropic-ai/sdk'
+import { validateMatrixFieldPresence } from '../lib/configurator'
 
 const anthropic = new Anthropic()
 const DELAY_MS = 500
@@ -25,28 +27,66 @@ const MAX_SPEC_TEXT_LENGTH = 80_000
 
 function buildExtractionPrompt(specText: string, familyName: string, catalogNumber: string): string {
   const truncated = specText.slice(0, MAX_SPEC_TEXT_LENGTH)
-  return `Extract the ordering/catalog number matrix from this lighting spec sheet.
+  return `You are extracting ordering/catalog information from a lighting spec sheet. Work in three phases.
 
 Product family: ${familyName}
 Representative catalog number: ${catalogNumber}
 
-The ordering matrix shows how to build a complete catalog/part number by selecting one option from each column. It typically appears under "Ordering Information" and includes:
-- A base family code as the first segment
-- Multiple required columns (Configuration, CCT, Voltage, Distribution, Height, Finish, etc.)
-- Each column has coded options with descriptions
-- Optional suffix codes added at the end for accessories/features
-- A sample number showing the full assembled string
+---
+PHASE 1 — DETECTION: Classify this spec sheet into exactly one matrixType:
+
+- "sku_table": The spec sheet has ONLY a table of pre-built stock part numbers. Each row IS a complete orderable part number — no separate columns of options to pick and combine to build a number. No ordering matrix section exists.
+
+- "configurable": The spec sheet has an ordering matrix with distinct columns of options (one code to pick per column to build a complete catalog string). No pre-built stock part table.
+
+- "hybrid": The spec sheet has BOTH a pre-built SKU table of orderable part numbers AND either (a) a separate ordering matrix section, OR (b) language suggesting more options exist — such as: "more configurations available", "additional configurations", "consult factory", "custom configurations", "additional options", "contact your rep", or any explicit reference to ordering information beyond the stock table.
+
+---
+PHASE 2 — EXTRACTION per matrixType:
+
+For "sku_table":
+  Extract skuEntries[] only. Each entry:
+    - position: row number (1-based, preserves source order)
+    - stockPartNumber: full complete part number string (REQUIRED)
+    - isCommon: true for rows visually emphasized (bold, shaded, "Most popular", "Standard", etc.)
+    - shortCode, lumens, watts, cct, voltage, housing, description: extract if present in table columns
+  Also extract:
+    - baseFamily: family code prefix or first word of first SKU
+    - sampleNumber: first entry's stockPartNumber
+
+For "configurable":
+  Extract the full ordering matrix:
+    - baseFamily: the first segment / family code
+    - separator: character between segments (usually "-")
+    - sampleNumber: example assembled catalog number from the sheet
+    - columns[]: ordered segments where you MUST pick exactly one option
+        Each column: { position (0-based), label, shortLabel, required, options[] }
+        Each option: { code, description, notes?, constraints? }
+        Position 0 IS the family code column. Joining all column selections should produce the sample number.
+    - suffixOptions[]: OPTIONAL codes added at the end (accessories/features)
+        Each suffix: { code, description, notes?, constraints? }
+  CRITICAL: Extract ALL options for each column, not just a sample.
+  Include footnote text in notes field. Include constraint text in constraints array.
+
+For "hybrid":
+  Extract BOTH:
+    - columns[], suffixOptions[] (the full ordering matrix, same rules as "configurable")
+    - skuEntries[] (the pre-built stock table, same rules as "sku_table")
+
+---
+PHASE 3 — RESPONSE FORMAT:
 
 Return ONLY valid JSON — no preamble, no markdown backticks.
 
-If no ordering matrix is found in the text, return: {"found": false}
+If no ordering matrix or SKU table is found at all, return: {"found": false}
 
 If found, return:
 {
   "found": true,
-  "baseFamily": "BRT6",
+  "matrixType": "configurable|sku_table|hybrid",
+  "baseFamily": "...",
   "separator": "-",
-  "sampleNumber": "BRT6-A3-740-U-T4-36-GM",
+  "sampleNumber": "...",
   "columns": [
     {
       "position": 0,
@@ -69,20 +109,25 @@ If found, return:
     }
   ],
   "suffixOptions": [
-    { "code": "DIM", "description": "External 0-10V Dimming Leads" },
-    { "code": "DALI", "description": "DALI Driver" }
+    { "code": "DIM", "description": "External 0-10V Dimming Leads" }
+  ],
+  "skuEntries": [
+    {
+      "position": 1,
+      "stockPartNumber": "BRT6-A3-740-U-T4-36-GM",
+      "lumens": "3000",
+      "watts": "24",
+      "cct": "4000K",
+      "voltage": "120-277V",
+      "isCommon": true
+    }
   ]
 }
 
-CRITICAL RULES:
-- Position 0 IS the family code column. The builder joins all column selections — it does NOT separately prepend baseFamily.
-- Verify: if you join one option from each column with the separator, it should roughly match the sample number.
-- SEPARATE required pick-one columns from optional additive suffix codes.
-  - Columns: ordered segments where you MUST pick exactly one option (Family, Config, CCT, Voltage, etc.)
-  - Suffix options: OPTIONAL codes added at the end (DIM, DALI, F, CBP, CC, etc.) — usually listed under "Options (Add as Suffix)"
-- Extract ALL options for each column, not just a sample.
-- Include footnote text in the notes field if present.
-- Include constraint text in the constraints array if mentioned (e.g., "Not available with 480V").
+Only include fields relevant to the matrixType:
+  - "configurable": include columns, suffixOptions, baseFamily, separator, sampleNumber (omit skuEntries)
+  - "sku_table": include skuEntries, baseFamily, sampleNumber (omit columns, suffixOptions, separator)
+  - "hybrid": include all fields
 
 Spec sheet text:
 ---
@@ -94,6 +139,8 @@ ${truncated}
 
 interface ExtractedMatrix {
   found: boolean
+  matrixType?: 'configurable' | 'sku_table' | 'hybrid'
+  // Configurable/Hybrid fields:
   baseFamily?: string
   separator?: string
   sampleNumber?: string
@@ -105,11 +152,24 @@ interface ExtractedMatrix {
     options: Array<{ code: string; description: string; notes?: string; constraints?: string[] }>
   }>
   suffixOptions?: Array<{ code: string; description: string; notes?: string; constraints?: string[] }>
+  // SKU table field:
+  skuEntries?: Array<{
+    position: number
+    stockPartNumber: string
+    shortCode?: string
+    lumens?: string
+    watts?: string
+    cct?: string
+    voltage?: string
+    housing?: string
+    description?: string
+    isCommon?: boolean
+  }>
 }
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 
-function validateMatrix(parsed: ExtractedMatrix): { valid: boolean; errors: string[] } {
+function validateConfigurableColumns(parsed: ExtractedMatrix): string[] {
   const errors: string[] = []
 
   if (!parsed.baseFamily || parsed.baseFamily.trim() === '') {
@@ -170,6 +230,54 @@ function validateMatrix(parsed: ExtractedMatrix): { valid: boolean; errors: stri
       }
       suffixCodes.add(suf.code)
     }
+  }
+
+  return errors
+}
+
+function validateSkuEntries(parsed: ExtractedMatrix): string[] {
+  const errors: string[] = []
+
+  if (!Array.isArray(parsed.skuEntries) || parsed.skuEntries.length === 0) {
+    errors.push('skuEntries is empty or missing')
+    return errors
+  }
+
+  for (const entry of parsed.skuEntries) {
+    if (!entry.stockPartNumber || entry.stockPartNumber.trim() === '') {
+      errors.push(`skuEntry at position ${entry.position} has empty stockPartNumber`)
+    }
+    if (typeof entry.position !== 'number' || entry.position <= 0) {
+      errors.push(`skuEntry "${entry.stockPartNumber}" has invalid position ${entry.position} (must be > 0)`)
+    }
+  }
+
+  return errors
+}
+
+function validateMatrix(parsed: ExtractedMatrix): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+
+  const matrixType = parsed.matrixType ?? 'configurable'
+
+  // Check field presence using shared lib validator
+  const presenceError = validateMatrixFieldPresence(
+    matrixType,
+    Array.isArray(parsed.columns) && parsed.columns.length > 0,
+    Array.isArray(parsed.skuEntries) && parsed.skuEntries.length > 0
+  )
+  if (presenceError) {
+    errors.push(presenceError)
+    return { valid: false, errors }
+  }
+
+  if (matrixType === 'sku_table') {
+    errors.push(...validateSkuEntries(parsed))
+  } else if (matrixType === 'configurable') {
+    errors.push(...validateConfigurableColumns(parsed))
+  } else if (matrixType === 'hybrid') {
+    errors.push(...validateConfigurableColumns(parsed))
+    errors.push(...validateSkuEntries(parsed))
   }
 
   return { valid: errors.length === 0, errors }
@@ -280,6 +388,13 @@ async function main() {
         continue
       }
 
+      // Map TS matrixType to Prisma enum
+      const matrixType = parsed.matrixType ?? 'configurable'
+      const dbMatrixType =
+        matrixType === 'sku_table' ? 'SKU_TABLE' as const :
+        matrixType === 'hybrid'    ? 'HYBRID'    as const :
+                                     'CONFIGURABLE' as const
+
       // Upsert the matrix at family level
       const matrix = await prisma.orderingMatrix.upsert({
         where: {
@@ -291,20 +406,24 @@ async function main() {
         create: {
           manufacturerId: product.manufacturerId,
           familyName: product.familyName!,
-          baseFamily: parsed.baseFamily!,
+          baseFamily: parsed.baseFamily ?? product.familyName!,
           separator: parsed.separator ?? '-',
           sampleNumber: parsed.sampleNumber ?? null,
-          columns: parsed.columns!,
-          suffixOptions: parsed.suffixOptions ?? [],
+          matrixType: dbMatrixType,
+          columns: parsed.columns ? (parsed.columns as Prisma.InputJsonValue) : Prisma.JsonNull,
+          suffixOptions: parsed.suffixOptions ? (parsed.suffixOptions as Prisma.InputJsonValue) : Prisma.JsonNull,
+          skuTable: parsed.skuEntries ? (parsed.skuEntries as Prisma.InputJsonValue) : Prisma.JsonNull,
           confidence: 0.80,
           extractionSource: 'AI',
         },
         update: {
-          baseFamily: parsed.baseFamily!,
+          baseFamily: parsed.baseFamily ?? product.familyName!,
           separator: parsed.separator ?? '-',
           sampleNumber: parsed.sampleNumber ?? null,
-          columns: parsed.columns!,
-          suffixOptions: parsed.suffixOptions ?? [],
+          matrixType: dbMatrixType,
+          columns: parsed.columns ? (parsed.columns as Prisma.InputJsonValue) : Prisma.JsonNull,
+          suffixOptions: parsed.suffixOptions ? (parsed.suffixOptions as Prisma.InputJsonValue) : Prisma.JsonNull,
+          skuTable: parsed.skuEntries ? (parsed.skuEntries as Prisma.InputJsonValue) : Prisma.JsonNull,
           confidence: 0.80,
           extractedAt: new Date(),
         },
@@ -325,7 +444,15 @@ async function main() {
       })
 
       extracted++
-      console.log(`  [${i + 1}/${uniqueFamilies.length}] OK ${product.manufacturer.name} | ${product.familyName} | ${parsed.columns!.length} cols + ${(parsed.suffixOptions ?? []).length} suffixes | ${familyCount} products linked | sample: ${parsed.sampleNumber}`)
+
+      // Log line varies by matrixType
+      if (matrixType === 'sku_table') {
+        console.log(`  [${i + 1}/${uniqueFamilies.length}] OK ${product.manufacturer.name} | ${product.familyName} | SKU TABLE | ${(parsed.skuEntries ?? []).length} SKUs | ${familyCount} products linked | sample: ${parsed.sampleNumber}`)
+      } else if (matrixType === 'hybrid') {
+        console.log(`  [${i + 1}/${uniqueFamilies.length}] OK ${product.manufacturer.name} | ${product.familyName} | HYBRID | ${(parsed.columns ?? []).length} cols + ${(parsed.skuEntries ?? []).length} SKUs | ${familyCount} products linked | sample: ${parsed.sampleNumber}`)
+      } else {
+        console.log(`  [${i + 1}/${uniqueFamilies.length}] OK ${product.manufacturer.name} | ${product.familyName} | ${(parsed.columns ?? []).length} cols + ${(parsed.suffixOptions ?? []).length} suffixes | ${familyCount} products linked | sample: ${parsed.sampleNumber}`)
+      }
     } catch (err) {
       console.error(`  [${i + 1}/${uniqueFamilies.length}] FAIL ${product.familyName}:`, err instanceof Error ? err.message : err)
       failed++
