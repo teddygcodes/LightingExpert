@@ -30,22 +30,27 @@ export async function POST(
       type: item.fixtureType,
       qty: item.quantity,
       manufacturer: p.manufacturer?.name ?? '',
-      catalogNumber: p.catalogNumber,
+      catalogNumber: item.catalogNumberOverride ?? p.catalogNumber,
       description: p.displayName ?? p.familyName ?? '',
-      watts: p.wattage != null ? `${p.wattage}W` : p.wattageMax != null ? `${p.wattageMin}–${p.wattageMax}W` : '',
-      lumens: p.lumens != null ? `${p.lumens}` : p.lumensMax != null ? `${p.lumensMin}–${p.lumensMax}` : '',
-      cct: Array.isArray(p.cctOptions) && p.cctOptions.length > 0 ? (p.cctOptions as number[]).map(String).join('/') : '',
-      cri: p.cri != null ? `${p.cri}` : '',
+      watts: p.wattage != null
+        ? `${p.wattage}W`
+        : p.wattageMax != null
+        ? `${p.wattageMin}–${p.wattageMax}W`
+        : '',
+      lumens: p.lumens != null
+        ? `${p.lumens}`
+        : p.lumensMax != null
+        ? `${p.lumensMin}–${p.lumensMax}`
+        : '',
+      cct: Array.isArray(p.cctOptions) && p.cctOptions.length > 0
+        ? (p.cctOptions as number[]).map(String).join('/')
+        : '',
       voltage: p.voltage ?? '',
-      ipNema: [p.ipRating, p.nemaRating].filter(Boolean).join(' / '),
-      mounting: Array.isArray(p.mountingType) ? (p.mountingType as string[]).join(', ') : '',
       location: item.location ?? '',
       notes: item.notes ?? '',
       specSheetPath,
     }
   })
-
-  const missingCatalogNumbers = fixtures.filter(f => !f.specSheetPath).map(f => f.catalogNumber)
 
   const coverData = {
     projectName: submittal.projectName,
@@ -53,20 +58,21 @@ export async function POST(
     clientName: submittal.clientName ?? undefined,
     contractorName: submittal.contractorName ?? undefined,
     preparedBy: submittal.preparedBy ?? undefined,
-    date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+    date: new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }),
     revisionNumber: submittal.revisionNumber,
-    fixtures: fixtures.map(f => ({
-      type: f.type,
-      qty: f.qty,
-      manufacturer: f.manufacturer,
-      catalogNumber: f.catalogNumber,
-      description: f.description,
-    })),
-    missingDocuments: missingCatalogNumbers,
   }
 
   try {
-    const result = await generateSubmittalPDF({ submittalId: id, coverData, fixtures })
+    const result = await generateSubmittalPDF({
+      submittalId: id,
+      coverData,
+      fixtures,
+      showBranding: true,
+    })
 
     await prisma.submittal.update({
       where: { id },

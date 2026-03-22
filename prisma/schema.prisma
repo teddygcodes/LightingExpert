@@ -176,9 +176,10 @@ model Manufacturer {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  products   Product[]
-  categories Category[]
-  crawlLogs  CrawlLog[]
+  products         Product[]
+  categories       Category[]
+  crawlLogs        CrawlLog[]
+  orderingMatrices OrderingMatrix[]
 }
 
 model Category {
@@ -287,6 +288,8 @@ model Product {
   overallConfidence Float?
   crawlEvidence    Json?
   configOptions    Json?
+  orderingMatrixId String?
+  orderingMatrix   OrderingMatrix? @relation(fields: [orderingMatrixId], references: [id])
   lastCrawled      DateTime?
 
   // ── PDF Extraction (staging — clean blobs, separated concerns) ──
@@ -389,12 +392,13 @@ model SubmittalItem {
   productId     String
   product       Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
 
-  fixtureType   String
-  quantity      Int
-  location      String?
-  mountingHeight Float?
-  notes         String?
-  sortOrder     Int       @default(0)
+  fixtureType           String
+  quantity              Int
+  catalogNumberOverride String?
+  location              String?
+  mountingHeight        Float?
+  notes                 String?
+  sortOrder             Int       @default(0)
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -446,4 +450,23 @@ model CrawlLog {
 
   @@index([manufacturerId])
   @@index([startedAt])
+}
+
+model OrderingMatrix {
+  id               String       @id @default(cuid())
+  manufacturerId   String
+  manufacturer     Manufacturer @relation(fields: [manufacturerId], references: [id])
+  familyName       String
+  baseFamily       String
+  separator        String       @default("-")
+  sampleNumber     String?
+  columns          Json         // OrderingColumn[]
+  suffixOptions    Json?        // SuffixOption[]
+  extractedAt      DateTime     @default(now())
+  extractionSource String       @default("AI")
+  confidence       Float        @default(0.8)
+  products         Product[]
+
+  @@unique([manufacturerId, familyName])
+  @@index([manufacturerId])
 }

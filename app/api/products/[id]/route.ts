@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { FieldProvenanceMap } from '@/lib/types'
+import { requireAuth } from '@/lib/auth'
 
 export async function GET(
   _req: NextRequest,
@@ -23,6 +24,9 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authError = await requireAuth()
+  if (authError) return authError
+
   const { id } = await params
   const body = await req.json()
 
