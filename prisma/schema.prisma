@@ -467,7 +467,7 @@ model OrderingMatrix {
   separator        String       @default("-")
   sampleNumber     String?
   matrixType       OrderingMatrixType @default(CONFIGURABLE)
-  columns          Json         // OrderingColumn[]
+  columns          Json?        // OrderingColumn[]
   suffixOptions    Json?        // SuffixOption[]
   skuTable         Json?        // SkuTableEntry[] — for SKU_TABLE and HYBRID; null for CONFIGURABLE
   extractedAt      DateTime     @default(now())
