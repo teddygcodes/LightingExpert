@@ -379,7 +379,11 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
           onClick={() => {
             const willOpen = !customBuilderOpen
             setCustomBuilderOpen(willOpen)
-            if (willOpen) setHybridMode('custom')
+            if (willOpen) {
+              setHybridMode('custom')
+            } else {
+              setHybridMode('sku')
+            }
           }}
           style={{
             background: 'none',
