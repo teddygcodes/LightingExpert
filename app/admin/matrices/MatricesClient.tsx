@@ -86,8 +86,8 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
 
   function openEdit(m: MatrixRow) {
     setEditing(m.id)
-    setEditColumns(JSON.stringify(m.columns, null, 2))
-    setEditSuffixes(JSON.stringify(m.suffixOptions ?? [], null, 2))
+    setEditColumns(m.columns !== null ? JSON.stringify(m.columns, null, 2) : '[]')
+    setEditSuffixes(m.suffixOptions !== null ? JSON.stringify(m.suffixOptions, null, 2) : '[]')
     setEditSample(m.sampleNumber ?? '')
     setEditSkuTable(JSON.stringify(m.skuTable ?? [], null, 2))
     setEditError(null)

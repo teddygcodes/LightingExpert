@@ -245,8 +245,8 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
             setSelectedSku(currentOverride)
             setHybridMode('sku')
             setColumnSelections(defaults)
-          } else {
-            // Step 2: Column parse
+          } else if (m.matrixType !== 'sku_table') {
+            // Step 2: Column parse (skip for sku_table — no columns to parse against)
             const parsed = parseExistingCatalog(currentOverride, m)
             if (parsed.confidence >= 0.5) {
               setColumnSelections({ ...defaults, ...parsed.columnSelections })
@@ -263,6 +263,9 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
               setColumnSelections(defaults)
               setParseWarning(`Could not parse "${currentOverride}" into this matrix (${Math.round(parsed.confidence * 100)}% match). Showing defaults — save to overwrite.`)
             }
+          } else {
+            // Step 3 directly for sku_table: override wasn't in the SKU list — show default state, no warning
+            setColumnSelections(defaults)
           }
         } else {
           setColumnSelections(defaults)

@@ -218,18 +218,3 @@ export function validateMatrixFieldPresence(
   }
   return null
 }
-
-/**
- * Build a BuildResult from a SkuTableEntry.
- * The entire stock part number becomes the catalog string; the build is always complete.
- */
-export function buildSkuSelection(entry: SkuTableEntry): BuildResult {
-  return {
-    catalogString: entry.stockPartNumber,
-    isComplete: true,
-    missingColumns: [],
-    warnings: [],
-    segments: [],
-    suffixes: [],
-  }
-}
