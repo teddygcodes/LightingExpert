@@ -14,10 +14,10 @@ export async function GET(
         include: {
           product: {
             select: {
-              id: true, catalogNumber: true, displayName: true, wattage: true,
+              id: true, catalogNumber: true, displayName: true, familyName: true, wattage: true,
               lumens: true, cri: true, cctOptions: true, voltage: true,
               ipRating: true, nemaRating: true, mountingType: true,
-              specSheetPath: true,
+              specSheetPath: true, orderingMatrixId: true,
               manufacturer: { select: { name: true, slug: true } },
             },
           },
