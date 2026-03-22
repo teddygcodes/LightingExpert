@@ -139,7 +139,10 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
     if (addSearch.length < 2) { setAddResults([]); return }
     const timer = setTimeout(async () => {
       const res = await fetch(`/api/products?search=${encodeURIComponent(addSearch)}&limit=8`)
-      if (res.ok) setAddResults(await res.json())
+      if (res.ok) {
+        const json = await res.json()
+        setAddResults(json.data ?? [])
+      }
     }, 200)
     return () => clearTimeout(timer)
   }, [addSearch])

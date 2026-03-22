@@ -195,11 +195,13 @@ function validateConfigurableColumns(parsed: ExtractedMatrix): string[] {
       if (col.required && (!col.options || col.options.length === 0)) {
         errors.push(`required column "${col.label}" has no options`)
       }
+      // Strip options with empty codes before validation (can happen in optional columns)
+      col.options = (col.options ?? []).filter(opt => opt.code && opt.code.trim() !== '')
+      if (col.required && col.options.length === 0) {
+        errors.push(`required column "${col.label}" has no valid options after filtering empty codes`)
+      }
       const codes = new Set<string>()
-      for (const opt of (col.options ?? [])) {
-        if (!opt.code || opt.code.trim() === '') {
-          errors.push(`empty option code in column "${col.label}"`)
-        }
+      for (const opt of col.options) {
         if (codes.has(opt.code)) {
           errors.push(`duplicate option code "${opt.code}" in column "${col.label}"`)
         }

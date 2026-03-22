@@ -3,6 +3,16 @@ import { prisma } from '@/lib/db'
 import { generateSubmittalPDF, FixtureEntry } from '@/lib/pdf/submittal-generator'
 import { getSpecSheetPath } from '@/lib/storage'
 
+// Fetch ordering matrix separator for a given matrix id via raw SQL
+// (bypasses stale Prisma client field validation)
+async function getMatrixSeparator(matrixId: string | null): Promise<string | null> {
+  if (!matrixId) return null
+  const rows = await prisma.$queryRaw<{ separator: string | null }[]>`
+    SELECT separator FROM "OrderingMatrix" WHERE id = ${matrixId} LIMIT 1
+  `
+  return rows[0]?.separator ?? null
+}
+
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -21,10 +31,25 @@ export async function POST(
 
   if (!submittal) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // Fetch matrix separators for items that have a catalogNumberOverride
+  // (need the separator to correctly split the override into option codes for highlighting)
+  const matrixIds = [...new Set(
+    submittal.items
+      .filter(item => item.catalogNumberOverride && item.product.orderingMatrixId)
+      .map(item => item.product.orderingMatrixId as string)
+  )]
+  const separatorMap = new Map<string, string | null>()
+  await Promise.all(matrixIds.map(async id => {
+    separatorMap.set(id, await getMatrixSeparator(id))
+  }))
+
   const fixtures: FixtureEntry[] = submittal.items.map(item => {
     const p = item.product
     const mfrSlug = p.manufacturer?.slug ?? ''
     const specSheetPath = getSpecSheetPath(mfrSlug, p.catalogNumber)
+    const matrixSeparator = p.orderingMatrixId
+      ? (separatorMap.get(p.orderingMatrixId) ?? '-')
+      : '-'
 
     return {
       type: item.fixtureType,
@@ -49,6 +74,8 @@ export async function POST(
       location: item.location ?? '',
       notes: item.notes ?? '',
       specSheetPath,
+      catalogOverride: item.catalogNumberOverride ?? null,
+      matrixSeparator,
     }
   })
 

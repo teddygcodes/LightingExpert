@@ -8,6 +8,7 @@ import { buildFixtureDividerPage } from './divider-page'
 import { buildMissingSpecSheetPage } from './placeholder-page'
 import { addHeaderFooter, HeaderFooterOptions } from './page-template'
 import { saveSubmittal } from '@/lib/storage'
+import { annotateSpecSheet } from './annotate-spec-sheet'
 
 // ── Natural sort for fixture types (A, A1, A2, AA, B, EM-A, etc.) ──
 function naturalCompare(a: string, b: string): number {
@@ -40,6 +41,8 @@ export interface FixtureEntry {
   location: string
   notes: string
   specSheetPath?: string | null
+  catalogOverride?: string | null     // configured catalog string for spec-sheet highlighting
+  matrixSeparator?: string | null     // separator used in the ordering matrix (default '-')
 }
 
 export interface GeneratorInput {
@@ -70,6 +73,8 @@ interface FixtureGroup {
   description: string
   locations: string[]
   specSheetPath?: string | null
+  catalogOverride?: string | null
+  matrixSeparator?: string | null
 }
 
 function groupFixtures(fixtures: FixtureEntry[]): FixtureGroup[] {
@@ -88,6 +93,8 @@ function groupFixtures(fixtures: FixtureEntry[]): FixtureGroup[] {
         description: f.description,
         locations: f.location ? [f.location] : [],
         specSheetPath: f.specSheetPath,
+        catalogOverride: f.catalogOverride,
+        matrixSeparator: f.matrixSeparator,
       })
     }
   }
@@ -214,6 +221,15 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, 'File read error', fonts)
       pageContexts.push({ isHeaderable: true, fixtureType: group.type, fixtureDescription: group.description })
       continue
+    }
+
+    // Annotate spec sheet with yellow highlights for the selected ordering options
+    if (group.catalogOverride) {
+      specBytes = await annotateSpecSheet(
+        specBytes,
+        group.catalogOverride,
+        group.matrixSeparator ?? '-',
+      )
     }
 
     try {

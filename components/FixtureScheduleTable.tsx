@@ -6,6 +6,7 @@ export interface FixtureRow {
   id: string
   fixtureType: string
   quantity: number
+  catalogNumberOverride: string | null
   location: string | null
   notes: string | null
   sortOrder: number
@@ -75,7 +76,9 @@ export default function FixtureScheduleTable({ submittalId, items, onItemsChange
         {items.map((item, idx) => (
           <tr key={item.id} style={{ background: idx % 2 === 0 ? '#f9f9f9' : '#fff', borderBottom: '1px solid #e0e0e0' }}>
             <td style={{ padding: '7px 10px', fontWeight: 700, fontFamily: 'monospace' }}>{item.fixtureType}</td>
-            <td style={{ padding: '7px 10px', fontFamily: 'monospace', color: '#d13438' }}>{item.product.catalogNumber}</td>
+            <td style={{ padding: '7px 10px', fontFamily: 'monospace', color: '#d13438' }}>
+              {item.catalogNumberOverride ?? item.product.catalogNumber}
+            </td>
             <td style={{ padding: '7px 10px', color: '#333' }}>{item.product.displayName ?? '—'}</td>
             <td style={{ padding: '7px 10px', color: '#6b6b6b' }}>{item.product.manufacturer?.name ?? '—'}</td>
             <td style={{ padding: '7px 10px', textAlign: 'center' }}>{item.quantity}</td>
