@@ -42,13 +42,13 @@ export interface SuffixOption {
 
 export interface OrderingMatrixData {
   id: string
+  matrixType: MatrixType
   baseFamily: string
   separator: string
   sampleNumber: string | null
   columns: OrderingColumn[]
   suffixOptions: SuffixOption[]
-  matrixType: MatrixType
-  skuEntries: SkuTableEntry[]      // SKU_TABLE + HYBRID: populated; CONFIGURABLE: []
+  skuEntries: SkuTableEntry[]      // sku_table + hybrid: populated; configurable: []
   uiMode: {
     showQuickPicks: boolean        // true for sku_table and hybrid
     showCustomBuilder: boolean     // true for configurable and hybrid
