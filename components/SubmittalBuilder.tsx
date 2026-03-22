@@ -86,7 +86,8 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
         fixtureType: fixtureType.toUpperCase(),
         quantity,
         locationTag: locationTag || null,
-        notes: hasConfig ? `${fullCatalogNumber}${notes ? ' — ' + notes : ''}` : (notes || null),
+        catalogNumberOverride: hasConfig ? fullCatalogNumber : undefined,
+        notes: notes || null,
       }),
     })
     setSelectedProduct(null)
