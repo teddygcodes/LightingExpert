@@ -2,6 +2,21 @@
 // Shared utilities for building and parsing catalog strings from ordering matrices.
 // Used by both the configurator API and the ProductConfigurator React component.
 
+export type MatrixType = 'configurable' | 'sku_table' | 'hybrid'
+
+export interface SkuTableEntry {
+  position: number          // required — preserves source order from spec sheet (1-based)
+  stockPartNumber: string   // required — "REBL ALO13 UVOLT SWW3 80CRI DWH M2"
+  shortCode?: string        // "*2B730" — UPC or catalog short code
+  lumens?: string           // "12,000/15,000/18,000"
+  watts?: string            // "80/100/120"
+  cct?: string              // "3500K/4000K/5000K"
+  voltage?: string          // "UVOLT (120-347V)"
+  housing?: string          // "DWH M2"
+  description?: string      // any additional notes
+  isCommon?: boolean        // true = highlight as common/popular config in quick-picks
+}
+
 export interface OrderingColumn {
   position: number
   label: string
@@ -27,11 +42,17 @@ export interface SuffixOption {
 
 export interface OrderingMatrixData {
   id: string
+  matrixType: MatrixType
   baseFamily: string
   separator: string
   sampleNumber: string | null
   columns: OrderingColumn[]
   suffixOptions: SuffixOption[]
+  skuEntries: SkuTableEntry[]      // sku_table + hybrid: populated; configurable: []
+  uiMode: {
+    showQuickPicks: boolean        // true for sku_table and hybrid
+    showCustomBuilder: boolean     // true for configurable and hybrid
+  }
 }
 
 export interface BuildResult {
@@ -174,4 +195,26 @@ export function parseExistingCatalog(
   const confidence = requiredColumns.length > 0 ? matchedRequired.length / requiredColumns.length : 0
 
   return { columnSelections, suffixSelections, unparsed, confidence }
+}
+
+/**
+ * Validate that the required data is present for the given matrix type.
+ * Returns an error string if validation fails, or null if valid.
+ */
+export function validateMatrixFieldPresence(
+  matrixType: MatrixType,
+  hasColumns: boolean,
+  hasSkuTable: boolean
+): string | null {
+  if (matrixType === 'configurable' && !hasColumns) {
+    return 'CONFIGURABLE requires columns'
+  }
+  if (matrixType === 'sku_table' && !hasSkuTable) {
+    return 'SKU_TABLE requires skuTable'
+  }
+  if (matrixType === 'hybrid') {
+    if (!hasColumns) return 'HYBRID requires columns'
+    if (!hasSkuTable) return 'HYBRID requires skuTable'
+  }
+  return null
 }
