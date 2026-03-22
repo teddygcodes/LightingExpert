@@ -198,7 +198,7 @@ function ColumnBuilder({
 
 interface Props {
   productId: string
-  submittalItemId: string
+  submittalItemId?: string
   currentOverride?: string | null
   onCatalogBuilt: (catalogString: string, isComplete: boolean) => void
   onClose: () => void
@@ -282,7 +282,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
   if (loading) {
     return (
       <div style={{ padding: '12px 16px', background: '#f9f9f9', border: '1px solid #e0e0e0', fontSize: 12, color: '#888' }}>
-        Loading configurator…
+        Analyzing spec sheet… this may take up to 30 seconds
       </div>
     )
   }

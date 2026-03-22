@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import ProductConfigurator from './ProductConfigurator'
 
 interface Props {
   submittalId: string
@@ -21,6 +22,7 @@ interface ProductOption {
   displayName: string | null
   specSheetPath: string | null
   configOptions: Record<string, string[]> | null
+  orderingMatrixId: string | null
   manufacturer: { name: string } | null
 }
 
@@ -28,6 +30,12 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [data, setData] = useState(initialData)
+  const [showProjectInfo, setShowProjectInfo] = useState(false)
+
+  // Schedule import
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ imported: string[]; unmatched: string[] } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fixture add form
   const [searchQuery, setSearchQuery] = useState('')
@@ -39,10 +47,15 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
   const [notes, setNotes] = useState('')
   const [adding, setAdding] = useState(false)
   const [configSelections, setConfigSelections] = useState<Record<string, string>>({})
+  const [showConfigurator, setShowConfigurator] = useState(false)
+  const [catalogOverride, setCatalogOverride] = useState<string | null>(null)
 
-  // Reset config selections whenever a new product is selected
+  // Reset config selections and catalog override whenever a new product is selected
   useEffect(() => {
-    if (!selectedProduct?.configOptions) { setConfigSelections({}); return }
+    setCatalogOverride(null)
+    if (!selectedProduct) { setConfigSelections({}); setShowConfigurator(false); return }
+    setShowConfigurator(true)
+    if (!selectedProduct.configOptions) { setConfigSelections({}); return }
     setConfigSelections(
       Object.fromEntries(Object.entries(selectedProduct.configOptions).map(([k, opts]) => [k, opts[0] ?? '']))
     )
@@ -60,6 +73,21 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
     setTimeout(() => setSaved(false), 2000)
   }
 
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setImportResult(null)
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch(`/api/submittals/${submittalId}/import-schedule`, { method: 'POST', body: form })
+    const json = await res.json()
+    setImportResult(json)
+    setImporting(false)
+    if (json.imported?.length) onRefresh()
+    e.target.value = ''
+  }
+
   async function searchProducts(q: string) {
     setSearchQuery(q)
     if (q.length < 2) { setSearchResults([]); return }
@@ -72,10 +100,13 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
     if (!selectedProduct || !fixtureType) return
     setAdding(true)
 
-    // Build full part number from config selections if available
-    const hasConfig = selectedProduct.configOptions && Object.keys(configSelections).length > 0
-    const configSuffix = hasConfig ? '-' + Object.values(configSelections).join('-') : ''
-    const fullCatalogNumber = selectedProduct.catalogNumber + configSuffix
+    // Use ordering matrix override if set; fall back to legacy configOptions build
+    let resolvedOverride: string | undefined
+    if (catalogOverride) {
+      resolvedOverride = catalogOverride
+    } else if (selectedProduct.configOptions && Object.keys(configSelections).length > 0) {
+      resolvedOverride = selectedProduct.catalogNumber + '-' + Object.values(configSelections).join('-')
+    }
 
     await fetch(`/api/submittals/${submittalId}`, {
       method: 'PUT',
@@ -86,7 +117,7 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
         fixtureType: fixtureType.toUpperCase(),
         quantity,
         locationTag: locationTag || null,
-        catalogNumberOverride: hasConfig ? fullCatalogNumber : undefined,
+        catalogNumberOverride: resolvedOverride,
         notes: notes || null,
       }),
     })
@@ -98,6 +129,7 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
     setLocationTag('')
     setNotes('')
     setConfigSelections({})
+    setCatalogOverride(null)
     setAdding(false)
     onRefresh()
   }
@@ -114,44 +146,95 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
 
   return (
     <div>
-      {/* Project Info */}
-      <div style={{ background: '#fff', border: '1px solid #e0e0e0', padding: 20, marginBottom: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}>Project Information</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div>
-            <label style={labelStyle}>PROJECT NAME *</label>
-            <input style={inputStyle} value={data.projectName} onChange={e => setData({ ...data, projectName: e.target.value })} />
+      {/* Project Info — collapsible */}
+      <div style={{ background: '#fff', border: '1px solid #e0e0e0', marginBottom: 20 }}>
+        <button
+          onClick={() => setShowProjectInfo(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            width: '100%', padding: '12px 16px', background: 'none', border: 'none',
+            cursor: 'pointer', fontSize: 13, fontWeight: 700, textAlign: 'left',
+          }}
+        >
+          <span>Edit Project Info</span>
+          <span style={{ fontSize: 11, color: '#6b6b6b' }}>{showProjectInfo ? '▲ Hide' : '▼ Show'}</span>
+        </button>
+        {showProjectInfo && (
+          <div style={{ padding: '0 16px 16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>PROJECT NAME *</label>
+                <input style={inputStyle} value={data.projectName} onChange={e => setData({ ...data, projectName: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>PROJECT NUMBER</label>
+                <input style={inputStyle} value={data.projectNumber ?? ''} onChange={e => setData({ ...data, projectNumber: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>PREPARED BY</label>
+                <input style={inputStyle} value={data.preparedBy ?? ''} onChange={e => setData({ ...data, preparedBy: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>PREPARED FOR</label>
+                <input style={inputStyle} value={data.preparedFor ?? ''} onChange={e => setData({ ...data, preparedFor: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>REVISION</label>
+                <input style={inputStyle} value={data.revision ?? ''} onChange={e => setData({ ...data, revision: e.target.value })} placeholder="Rev 0" />
+              </div>
+              <div>
+                <label style={labelStyle}>NOTES</label>
+                <input style={inputStyle} value={data.notes ?? ''} onChange={e => setData({ ...data, notes: e.target.value })} />
+              </div>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <button
+                onClick={saveProjectInfo}
+                disabled={saving}
+                style={{ background: '#1a1a1a', color: '#fff', border: 'none', padding: '8px 18px', fontSize: 13, cursor: 'pointer' }}
+              >
+                {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save Project Info'}
+              </button>
+            </div>
           </div>
-          <div>
-            <label style={labelStyle}>PROJECT NUMBER</label>
-            <input style={inputStyle} value={data.projectNumber ?? ''} onChange={e => setData({ ...data, projectNumber: e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>PREPARED BY</label>
-            <input style={inputStyle} value={data.preparedBy ?? ''} onChange={e => setData({ ...data, preparedBy: e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>PREPARED FOR</label>
-            <input style={inputStyle} value={data.preparedFor ?? ''} onChange={e => setData({ ...data, preparedFor: e.target.value })} />
-          </div>
-          <div>
-            <label style={labelStyle}>REVISION</label>
-            <input style={inputStyle} value={data.revision ?? ''} onChange={e => setData({ ...data, revision: e.target.value })} placeholder="Rev 0" />
-          </div>
-          <div>
-            <label style={labelStyle}>NOTES</label>
-            <input style={inputStyle} value={data.notes ?? ''} onChange={e => setData({ ...data, notes: e.target.value })} />
-          </div>
-        </div>
-        <div style={{ marginTop: 14 }}>
+        )}
+      </div>
+
+      {/* Import from Schedule */}
+      <input ref={fileInputRef} type="file" accept="image/*,.pdf" onChange={handleImport} style={{ display: 'none' }} />
+      <div style={{ background: '#fff', border: '1px solid #e0e0e0', padding: '12px 16px', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button
-            onClick={saveProjectInfo}
-            disabled={saving}
-            style={{ background: '#1a1a1a', color: '#fff', border: 'none', padding: '8px 18px', fontSize: 13, cursor: 'pointer' }}
+            onClick={() => { setImportResult(null); fileInputRef.current?.click() }}
+            disabled={importing}
+            style={{
+              background: importing ? '#ccc' : '#1a1a1a',
+              color: '#fff', border: 'none', padding: '8px 18px',
+              fontSize: 13, fontWeight: 600,
+              cursor: importing ? 'not-allowed' : 'pointer',
+            }}
           >
-            {saving ? 'Saving…' : saved ? 'Saved' : 'Save Project Info'}
+            {importing ? 'Reading fixture schedule…' : '↑ Import from Schedule'}
           </button>
+          <span style={{ fontSize: 12, color: '#6b6b6b' }}>Upload a screenshot or PDF of a fixture schedule to auto-populate</span>
         </div>
+        {importResult && (
+          <div style={{ marginTop: 10, fontSize: 12 }}>
+            {importResult.imported.length > 0 && (
+              <div style={{ color: '#107c10', fontWeight: 600 }}>
+                ✓ Imported {importResult.imported.length} fixture{importResult.imported.length !== 1 ? 's' : ''}
+              </div>
+            )}
+            {importResult.unmatched.length > 0 && (
+              <div style={{ color: '#ff8c00', marginTop: 4 }}>
+                ⚠ {importResult.unmatched.length} not found in database — add manually: {importResult.unmatched.join(', ')}
+              </div>
+            )}
+            {importResult.imported.length === 0 && importResult.unmatched.length === 0 && (
+              <div style={{ color: '#6b6b6b' }}>No fixture entries found in the uploaded document.</div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Add Fixture */}
@@ -215,8 +298,33 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
             <input style={inputStyle} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
           </div>
         </div>
-        {/* Config dropdowns — shown when selected product has configOptions */}
-        {selectedProduct?.configOptions && Object.keys(selectedProduct.configOptions).length > 0 && (
+        {/* Ordering matrix configurator — attempted for all products; silently hides if no matrix */}
+        {selectedProduct && (
+          <div style={{ marginTop: 10 }}>
+            {catalogOverride ? (
+              <div style={{ background: '#f0f4f8', border: '1px solid #0078d4', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 600, textTransform: 'uppercase' }}>Selected:</span>
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1a1a1a', fontSize: 13 }}>{catalogOverride}</span>
+                <button
+                  onClick={() => { setCatalogOverride(null); setShowConfigurator(true) }}
+                  style={{ marginLeft: 'auto', background: 'none', border: '1px solid #0078d4', color: '#0078d4', padding: '2px 8px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Change
+                </button>
+              </div>
+            ) : showConfigurator ? (
+              <ProductConfigurator
+                productId={selectedProduct.id}
+                currentOverride={null}
+                onCatalogBuilt={(s) => { setCatalogOverride(s); setShowConfigurator(false) }}
+                onClose={() => setShowConfigurator(false)}
+              />
+            ) : null}
+          </div>
+        )}
+
+        {/* Legacy configOptions dropdowns (fallback for older products) */}
+        {!selectedProduct?.orderingMatrixId && selectedProduct?.configOptions && Object.keys(selectedProduct.configOptions).length > 0 && (
           <div style={{ background: '#f9f9f9', border: '1px solid #e0e0e0', padding: '12px 14px', marginTop: 10 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
               Configure Fixture

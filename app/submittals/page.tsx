@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
+import { DeleteSubmittalButton } from '@/components/DeleteSubmittalButton'
 
 const STATUS_COLOR: Record<string, string> = {
   DRAFT: '#6b6b6b',
@@ -62,6 +63,7 @@ export default async function SubmittalsPage() {
               <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Fixtures</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Updated</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>PDF</th>
+              <th style={{ padding: '8px 12px', width: 32 }}></th>
             </tr>
           </thead>
           <tbody>
@@ -98,6 +100,9 @@ export default async function SubmittalsPage() {
                   ) : (
                     <span style={{ color: '#aaa', fontSize: 12 }}>Not generated</span>
                   )}
+                </td>
+                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                  <DeleteSubmittalButton id={s.id} name={s.projectName} />
                 </td>
               </tr>
             ))}
