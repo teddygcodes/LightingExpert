@@ -23,7 +23,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
     fetch(`/api/products/${productId}/configurator`)
       .then(r => r.json())
       .then(data => {
-        if (!data.hasMatrix) { onClose(); return }
+        if (!data.hasMatrix) { setLoading(false); onClose(); return }
         const m = data.matrix as OrderingMatrixData
         setMatrix(m)
 
@@ -53,8 +53,8 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
         } else {
           setColumnSelections(defaults)
         }
+        setLoading(false)
       })
-      .finally(() => setLoading(false))
   }, [productId, currentOverride])
 
   if (loading) {

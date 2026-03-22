@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import ProductConfigurator from './ProductConfigurator'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -641,8 +641,8 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
                 </tr>
               )}
               {items.map((item, idx) => (
-                <>
-                  <tr key={item.id} style={{ background: idx % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                <React.Fragment key={item.id}>
+                  <tr style={{ background: idx % 2 === 0 ? '#fff' : '#f9f9f9' }}>
                     {renderCell(item, 'fixtureType')}
                     {renderCell(item, 'quantity')}
                     {renderCell(item, 'catalogNumberOverride')}
@@ -699,7 +699,7 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
