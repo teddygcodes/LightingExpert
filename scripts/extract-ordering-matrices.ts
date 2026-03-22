@@ -243,14 +243,14 @@ function validateSkuEntries(parsed: ExtractedMatrix): string[] {
     return errors
   }
 
-  for (const entry of parsed.skuEntries) {
+  parsed.skuEntries.forEach((entry, i) => {
     if (!entry.stockPartNumber || entry.stockPartNumber.trim() === '') {
       errors.push(`skuEntry at position ${entry.position} has empty stockPartNumber`)
     }
     if (typeof entry.position !== 'number' || entry.position <= 0) {
-      errors.push(`skuEntry "${entry.stockPartNumber}" has invalid position ${entry.position} (must be > 0)`)
+      errors.push(`skuEntry at index ${i} has invalid position ${entry.position} (must be > 0)`)
     }
-  }
+  })
 
   return errors
 }
@@ -364,7 +364,7 @@ async function main() {
     try {
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
+        max_tokens: 8192,
         messages: [{
           role: 'user',
           content: buildExtractionPrompt(product.rawSpecText, product.familyName!, product.catalogNumber),
