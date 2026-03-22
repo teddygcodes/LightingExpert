@@ -95,6 +95,14 @@ export async function POST(
     return NextResponse.json({ error: 'No ordering matrix found in spec text' }, { status: 422 })
   }
 
+  // Basic validation before writing
+  if (!Array.isArray(parsed.columns) || parsed.columns.length === 0) {
+    return NextResponse.json({ error: 'Claude returned no columns — extraction failed' }, { status: 422 })
+  }
+  if (!parsed.baseFamily || typeof parsed.baseFamily !== 'string') {
+    return NextResponse.json({ error: 'Claude returned no baseFamily — extraction failed' }, { status: 422 })
+  }
+
   const updated = await prisma.orderingMatrix.update({
     where: { id },
     data: {

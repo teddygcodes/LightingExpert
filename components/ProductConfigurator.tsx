@@ -21,7 +21,10 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
 
   useEffect(() => {
     fetch(`/api/products/${productId}/configurator`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
       .then(data => {
         if (!data.hasMatrix) { setLoading(false); onClose(); return }
         const m = data.matrix as OrderingMatrixData
@@ -54,6 +57,10 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
           setColumnSelections(defaults)
         }
         setLoading(false)
+      })
+      .catch(() => {
+        setLoading(false)
+        onClose()
       })
   }, [productId, currentOverride])
 

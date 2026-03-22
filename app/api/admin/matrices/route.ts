@@ -21,6 +21,16 @@ export async function PUT(req: NextRequest) {
   // Validate JSON parseable arrays
   if (!Array.isArray(columns)) return NextResponse.json({ error: 'columns must be an array' }, { status: 400 })
 
+  // Validate each column has position (number) and options (array)
+  for (const col of columns) {
+    if (typeof col.position !== 'number') {
+      return NextResponse.json({ error: 'Each column must have a numeric position' }, { status: 400 })
+    }
+    if (!Array.isArray(col.options)) {
+      return NextResponse.json({ error: `Column at position ${col.position} must have an options array` }, { status: 400 })
+    }
+  }
+
   const matrix = await prisma.orderingMatrix.update({
     where: { id },
     data: {

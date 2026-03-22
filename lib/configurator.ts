@@ -151,10 +151,8 @@ export function parseExistingCatalog(
     if (match) {
       columnSelections[String(col.position)] = match.code
       matchedSegmentIndices.add(segIdx)
-      segIdx++
     }
-    // If no match for this column, still advance segIdx to try next segment
-    // (lenient: skip unrecognized segments)
+    segIdx++ // always advance — one segment per column attempt
   }
 
   // Remaining unmatched segments — check against suffix codes
