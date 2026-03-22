@@ -39,7 +39,9 @@ PHASE 1 — DETECTION: Classify this spec sheet into exactly one matrixType:
 
 - "configurable": The spec sheet has an ordering matrix with distinct columns of options (one code to pick per column to build a complete catalog string). No pre-built stock part table.
 
-- "hybrid": The spec sheet has BOTH a pre-built SKU table of orderable part numbers AND either (a) a separate ordering matrix section, OR (b) language suggesting more options exist — such as: "more configurations available", "additional configurations", "consult factory", "custom configurations", "additional options", "contact your rep", or any explicit reference to ordering information beyond the stock table.
+- "hybrid": The spec sheet has BOTH a pre-built SKU table of orderable part numbers AND either (a) a separate ordering matrix section WITH DISTINCT OPTION COLUMNS physically printed on this spec sheet, OR (b) language that clearly implies further configurations exist and the ordering matrix is described somewhere on the sheet itself.
+
+  IMPORTANT: Do NOT classify as "hybrid" if the only hint of additional options is a hyperlink or website redirect (e.g. "Click here", "visit www.acuitybrands.com", "search for [family] online"). A link to an external website is NOT an ordering matrix. If the spec sheet has a SKU table plus only a web link for "more configurations", classify as "sku_table" — the ordering matrix is not present on this document.
 
 ---
 PHASE 2 — EXTRACTION per matrixType:
@@ -255,6 +257,17 @@ function validateSkuEntries(parsed: ExtractedMatrix): string[] {
   return errors
 }
 
+function reclassifyIfNeeded(parsed: ExtractedMatrix, familyName: string): void {
+  // Safety net: if Claude classified as hybrid but extracted no columns, the spec sheet
+  // only contained a SKU table (e.g. "More configurations available — click here" on the sheet).
+  // Downgrade to sku_table rather than failing validation.
+  if (parsed.matrixType === 'hybrid' && (!Array.isArray(parsed.columns) || parsed.columns.length === 0)) {
+    console.warn(`  [warn] Reclassifying "${familyName}" from hybrid → sku_table (hybrid returned no columns)`)
+    parsed.matrixType = 'sku_table'
+    delete parsed.columns
+  }
+}
+
 function validateMatrix(parsed: ExtractedMatrix): { valid: boolean; errors: string[] } {
   const errors: string[] = []
 
@@ -381,6 +394,7 @@ async function main() {
         continue
       }
 
+      reclassifyIfNeeded(parsed, product.familyName!)
       const { valid, errors } = validateMatrix(parsed)
       if (!valid) {
         console.log(`  [${i + 1}/${uniqueFamilies.length}] INVALID ${product.familyName}: ${errors.join('; ')}`)
