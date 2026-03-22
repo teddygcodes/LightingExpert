@@ -76,6 +76,30 @@ const ELITE_CUSTOM_FAMILIES: Record<string, Array<{ slug: string; name: string; 
     { slug: 'undercabinet',                   name: 'Undercabinet Lighting',                     url: 'https://iuseelite.com/product-category/undercabinet/' },
     { slug: 'vandal-resistant',               name: 'Vandal Resistant',                          url: 'https://iuseelite.com/product-category/vandal-resistant/' },
     { slug: 'exit-emergency',                 name: 'Exit & Emergency Lighting',                 url: 'https://iuseelite.com/product-category/exit-emergency-lighting/' },
+    // Previously missing — behind marketing hub pages whose tiles link to non-product-category URLs
+    // Flat Panel (behind /flat-panel/ hub)
+    { slug: 'led-flat-panel',                            name: 'LED Flat Panel',                               url: 'https://iuseelite.com/product-category/led-flat-panel/' },
+    // Micro Downlighting (behind /micro/ hub — 4 sub-families)
+    { slug: 'micro-recessed-downlights',                 name: 'Micro Recessed Downlights',                    url: 'https://iuseelite.com/product-category/micro-recessed-downlights/' },
+    { slug: 'micro-recessed-wall-wash',                  name: 'Micro Recessed Wall Wash',                     url: 'https://iuseelite.com/product-category/micro-recessed-wall-wash/' },
+    { slug: 'micro-recessed-adjustable',                 name: 'Micro Recessed Adjustable',                    url: 'https://iuseelite.com/product-category/micro-recessed-adjustable/' },
+    { slug: 'micro-trimless-recessed',                   name: 'Micro Trimless Recessed',                      url: 'https://iuseelite.com/product-category/micro-trimless-recessed/' },
+    // Tape Light System (behind /tape-light-system/ hub)
+    { slug: 'tapepowersupply',                           name: 'Tape Light Power Supply',                      url: 'https://iuseelite.com/product-category/tapepowersupply/' },
+    // Combo & Retrofit (behind /combo-lighting/ and /led-slim-retrofit/ hubs)
+    { slug: 'recessed-multi-lamp-combo-lights',          name: 'Recessed Multi-Lamp Combo Lights',             url: 'https://iuseelite.com/product-category/recessed-multi-lamp-combo-lights/' },
+    { slug: 'canless-recessed',                          name: 'Canless Recessed (LED Slim Retrofit)',          url: 'https://iuseelite.com/product-category/canless-recessed/' },
+    // Specification Downlighting (behind sub-landing hub pages)
+    { slug: 'small-aperture-specification-downlighting', name: 'Small Aperture Specification Downlighting',    url: 'https://iuseelite.com/product-category/small-aperture-specification-downlighting/' },
+    { slug: 'shallow-plenum-specification-downlighting', name: 'Shallow Plenum Specification Downlighting',    url: 'https://iuseelite.com/product-category/shallow-plenum-specification-downlighting/' },
+    // Direct/Indirect (behind /direct-indirect/ hub — actual WooCommerce slug is recessed-direct-indirect)
+    { slug: 'recessed-direct-indirect',                  name: 'Recessed Direct/Indirect',                     url: 'https://iuseelite.com/product-category/recessed-direct-indirect/' },
+    // Small Aperture Linear Slot (behind /small-aperture-linear-slot/ hub — actual slug is omls)
+    { slug: 'omls',                                      name: 'Small Aperture Linear Slot (OMLS)',             url: 'https://iuseelite.com/product-category/omls/' },
+    // Soul decorative pendant family (behind /soul/ hub)
+    { slug: 'soul',                                      name: 'Soul',                                         url: 'https://iuseelite.com/product-category/soul/' },
+    // IP Rated / Wet Location / Food Processing (behind /ip-rated-wet-location-food-processing/ hub)
+    { slug: 'ip-rated-wet-location-food-processing',    name: 'IP Rated / Wet Location / Food Processing',    url: 'https://iuseelite.com/product-category/ip-rated-wet-location-food-processing/' },
   ],
 
   'exterior-lighting': [
@@ -305,7 +329,8 @@ async function collectProductUrlsFromCategoryPage(page: Page, baseUrl: string): 
 async function discoverProductsByCategoryPage(
   browser: Browser,
   rootSlug: string,
-  landingPath: string
+  landingPath: string,
+  familiesToCrawl?: string[]
 ): Promise<CrawlEntry[]> {
   const entries: CrawlEntry[] = []
   const page = await browser.newPage()
@@ -362,8 +387,14 @@ async function discoverProductsByCategoryPage(
       }
     }
 
-    const families = [...familyMap.values()]
-    console.log(`[Category] ${rootSlug}: found ${families.length} sub-categories total (${customFamilies.length} custom landing pages merged)`)
+    let families = [...familyMap.values()]
+    if (familiesToCrawl && familiesToCrawl.length > 0) {
+      const familySet = new Set(familiesToCrawl)
+      families = families.filter(f => familySet.has(f.slug))
+      console.log(`[Category] ${rootSlug}: filtered to ${families.length} families (--families filter active)`)
+    } else {
+      console.log(`[Category] ${rootSlug}: found ${families.length} sub-categories total (${customFamilies.length} custom landing pages merged)`)
+    }
 
     // Fallback: if no sub-categories found, paginate the WooCommerce root directly
     if (families.length === 0) {
@@ -629,10 +660,14 @@ async function extractProductFromPage(
 // ─── Main Crawl Entry Point ───────────────────────────────────────────────────
 
 export async function crawlElite(
-  rootCategoriesToCrawl: string[] = Object.keys(ELITE_ROOT_CATEGORY_PATHS)
+  rootCategoriesToCrawl: string[] = Object.keys(ELITE_ROOT_CATEGORY_PATHS),
+  familiesToCrawl?: string[]
 ): Promise<EliteProduct[]> {
   console.log('[Elite Crawler] Starting (category-based mode)...')
   console.log(`[Elite Crawler] Categories: ${rootCategoriesToCrawl.join(', ')}`)
+  if (familiesToCrawl && familiesToCrawl.length > 0) {
+    console.log(`[Elite Crawler] Families filter: ${familiesToCrawl.join(', ')}`)
+  }
 
   const browser = await chromium.launch({ headless: true })
 
@@ -648,7 +683,7 @@ export async function crawlElite(
         continue
       }
 
-      const entries = await discoverProductsByCategoryPage(browser, rootSlug, elitePath)
+      const entries = await discoverProductsByCategoryPage(browser, rootSlug, elitePath, familiesToCrawl)
 
       let addedCount = 0
       for (const entry of entries) {
