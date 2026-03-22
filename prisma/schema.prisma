@@ -166,6 +166,12 @@ enum CanonicalFixtureType {
   OTHER
 }
 
+enum OrderingMatrixType {
+  CONFIGURABLE
+  SKU_TABLE
+  HYBRID
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Manufacturer {
@@ -460,8 +466,10 @@ model OrderingMatrix {
   baseFamily       String
   separator        String       @default("-")
   sampleNumber     String?
+  matrixType       OrderingMatrixType @default(CONFIGURABLE)
   columns          Json         // OrderingColumn[]
   suffixOptions    Json?        // SuffixOption[]
+  skuTable         Json?        // SkuTableEntry[] — for SKU_TABLE and HYBRID; null for CONFIGURABLE
   extractedAt      DateTime     @default(now())
   extractionSource String       @default("AI")
   confidence       Float        @default(0.8)
