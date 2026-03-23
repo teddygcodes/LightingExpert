@@ -1,9 +1,14 @@
 import { PDFDocument, PDFFont, rgb } from 'pdf-lib'
+import * as fs from 'fs'
+import * as path from 'path'
 
 const BLACK = rgb(0, 0, 0)
 const DARK = rgb(0.1, 0.1, 0.1)
 const GRAY = rgb(0.42, 0.42, 0.42)
 const LIGHT_GRAY = rgb(0.92, 0.92, 0.92)
+
+const LOGO_ZONE_H = 120
+const LOGO_ZONE_Y = 792 - LOGO_ZONE_H  // 672
 
 export interface CoverSheetData {
   projectName: string
@@ -15,40 +20,63 @@ export interface CoverSheetData {
   revisionNumber: number
 }
 
-export function buildCoverSheet(
+export async function buildCoverSheet(
   pdfDoc: PDFDocument,
   data: CoverSheetData,
   fonts: { regular: PDFFont; bold: PDFFont },
   showBranding = true
-): void {
+): Promise<void> {
   const page = pdfDoc.addPage([612, 792])
   const { width } = page.getSize()
   const { regular, bold } = fonts
 
-  // ── Logo placeholder ──────────────────────────────────────────────
-  const logoW = 200
-  const logoH = 80
-  const logoX = (width - logoW) / 2
-  const logoY = 668
+  // ── Logo zone ─────────────────────────────────────────────────────
+  const logoPaths = [
+    path.join(process.cwd(), 'public', 'atlantiskb-logo.png'),
+    path.join(process.cwd(), 'public', 'atlantiskb-logo.jpg'),
+  ]
+  let logoEmbedded = false
+  for (const logoPath of logoPaths) {
+    if (!fs.existsSync(logoPath)) continue
+    try {
+      const logoBytes = fs.readFileSync(logoPath)
+      const logoImage = logoPath.endsWith('.png')
+        ? await pdfDoc.embedPng(logoBytes)
+        : await pdfDoc.embedJpg(logoBytes)
+      const maxH = LOGO_ZONE_H - 20   // 10pt padding top + bottom
+      const maxW = 540                 // content width (36pt margins each side)
+      const scale = Math.min(maxW / logoImage.width, maxH / logoImage.height)
+      const imgW = logoImage.width * scale
+      const imgH = logoImage.height * scale
+      page.drawImage(logoImage, {
+        x: (width - imgW) / 2,
+        y: LOGO_ZONE_Y + (LOGO_ZONE_H - imgH) / 2,
+        width: imgW,
+        height: imgH,
+      })
+      logoEmbedded = true
+      break
+    } catch { /* fall through to text fallback */ }
+  }
 
-  page.drawRectangle({
-    x: logoX,
-    y: logoY,
-    width: logoW,
-    height: logoH,
-    borderColor: LIGHT_GRAY,
-    borderWidth: 1,
-    color: rgb(0.97, 0.97, 0.97),
-  })
+  if (!logoEmbedded) {
+    const brand = 'ATLANTIS KB'
+    const brandW = bold.widthOfTextAtSize(brand, 28)
+    page.drawText(brand, {
+      x: (width - brandW) / 2,
+      y: LOGO_ZONE_Y + (LOGO_ZONE_H - 28) / 2,
+      font: bold,
+      size: 28,
+      color: BLACK,
+    })
+  }
 
-  const logoLabel = 'COMPANY NAME'
-  const logoLabelW = bold.widthOfTextAtSize(logoLabel, 11)
-  page.drawText(logoLabel, {
-    x: logoX + (logoW - logoLabelW) / 2,
-    y: logoY + logoH / 2 - 6,
-    font: bold,
-    size: 11,
-    color: GRAY,
+  // Bold dark rule below logo zone
+  page.drawLine({
+    start: { x: 36, y: LOGO_ZONE_Y },
+    end: { x: width - 36, y: LOGO_ZONE_Y },
+    thickness: 2,
+    color: DARK,
   })
 
   // ── Title ─────────────────────────────────────────────────────────
@@ -60,13 +88,6 @@ export function buildCoverSheet(
     font: bold,
     size: 22,
     color: BLACK,
-  })
-
-  page.drawLine({
-    start: { x: 36, y: 614 },
-    end: { x: width - 36, y: 614 },
-    thickness: 0.5,
-    color: LIGHT_GRAY,
   })
 
   // ── Project info table ────────────────────────────────────────────
@@ -104,7 +125,6 @@ export function buildCoverSheet(
   const colW = 135
   for (let i = 0; i < approvalOptions.length; i++) {
     const ax = 44 + i * colW
-    // Checkbox square
     page.drawRectangle({
       x: ax,
       y: y - 10,
@@ -123,7 +143,7 @@ export function buildCoverSheet(
     })
   }
 
-  // ── Signature lines ────────────────────────────────────────────────
+  // ── Signature lines ───────────────────────────────────────────────
   y -= 70
   page.drawLine({ start: { x: 36, y }, end: { x: 260, y }, thickness: 0.5, color: DARK })
   page.drawLine({ start: { x: 290, y }, end: { x: 576, y }, thickness: 0.5, color: DARK })
