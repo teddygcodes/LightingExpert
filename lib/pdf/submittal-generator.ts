@@ -2,9 +2,7 @@ import { PDFDocument, PDFPage, PDFName, PDFArray, StandardFonts, PageSizes } fro
 import * as fs from 'fs'
 import * as path from 'path'
 import { buildCoverSheet, CoverSheetData } from './cover-sheet'
-import { buildFixtureSchedule, ScheduleRow } from './fixture-schedule'
 import { buildTableOfContents, TocEntry } from './table-of-contents'
-import { buildFixtureDividerPage } from './divider-page'
 import { buildMissingSpecSheetPage } from './placeholder-page'
 import { addHeaderFooter, HeaderFooterOptions } from './page-template'
 import { saveSubmittal } from '@/lib/storage'
@@ -164,69 +162,30 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
   // ──────────────────────────────────────────────────────────────────
 
   // Page 0: Cover (not headered)
-  buildCoverSheet(pdfDoc, input.coverData, fonts, input.showBranding ?? true)
+  await buildCoverSheet(pdfDoc, input.coverData, fonts, input.showBranding ?? true)
   pageContexts.push({ isHeaderable: false })
 
   // Page 1: TOC — blank page, filled in during Pass 2
   const tocPage = pdfDoc.addPage(PageSizes.Letter)
   pageContexts.push({ isHeaderable: true })
 
-  // Pages 2+: Fixture schedule
+  // Group fixtures for divider + spec sheet sections
   const groups = groupFixtures(input.fixtures)
 
-  const scheduleRows: ScheduleRow[] = groups.map(g => ({
-    type: g.type,
-    qty: g.totalQty,
-    manufacturer: g.manufacturer,
-    catalogNumber: g.catalogNumber,
-    watts: input.fixtures.find(f => f.type === g.type)?.watts ?? '',
-    lumens: input.fixtures.find(f => f.type === g.type)?.lumens ?? '',
-    cct: input.fixtures.find(f => f.type === g.type)?.cct ?? '',
-    voltage: input.fixtures.find(f => f.type === g.type)?.voltage ?? '',
-    location: g.locations.join(', '),
-  }))
-
-  const schedulePages = buildFixtureSchedule(pdfDoc, scheduleRows, fonts)
-  for (const _ of schedulePages) {
-    pageContexts.push({ isHeaderable: true })
-  }
-
-  // Fixture sections: divider + spec sheets
+  // Fixture sections: spec sheets (TOC links directly to first spec page per group)
   interface TocSection {
     type: string
     totalQty: number
     manufacturer: string
     catalogNumber: string
-    dividerPageIndex: number
-    dividerPageRef: ReturnType<typeof pdfDoc.getPage>['ref']
+    specPageIndex: number
+    specPageRef: ReturnType<typeof pdfDoc.getPage>['ref']
   }
   const tocSections: TocSection[] = []
 
   for (const group of groups) {
-    // Divider page
-    const dividerPage = buildFixtureDividerPage(pdfDoc, {
-      type: group.type,
-      manufacturer: group.manufacturer,
-      catalogNumber: group.catalogNumber,
-      qty: group.totalQty,
-      location: group.locations.join(', '),
-    }, fonts)
-
-    const dividerPageIndex = pdfDoc.getPageCount() - 1
-    pageContexts.push({
-      isHeaderable: true,
-      fixtureType: group.type,
-      fixtureDescription: group.description,
-    })
-
-    tocSections.push({
-      type: group.type,
-      totalQty: group.totalQty,
-      manufacturer: group.manufacturer,
-      catalogNumber: group.catalogNumber,
-      dividerPageIndex,
-      dividerPageRef: dividerPage.ref,
-    })
+    // Record where this group's first page will land
+    const specPageIndex = pdfDoc.getPageCount()
 
     // Spec sheet pages
     const specPageCtx: PageContext = {
@@ -241,6 +200,7 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
       warnings.push(`Missing spec sheet for ${group.catalogNumber}`)
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, 'Spec sheet not cached', fonts)
       pageContexts.push(specPageCtx)
+      tocSections.push({ type: group.type, totalQty: group.totalQty, manufacturer: group.manufacturer, catalogNumber: group.catalogNumber, specPageIndex, specPageRef: pdfDoc.getPage(specPageIndex).ref })
       continue
     }
 
@@ -249,6 +209,7 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
       warnings.push(`Invalid spec sheet path for ${group.catalogNumber} — path traversal rejected`)
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, 'Invalid file path', fonts)
       pageContexts.push(specPageCtx)
+      tocSections.push({ type: group.type, totalQty: group.totalQty, manufacturer: group.manufacturer, catalogNumber: group.catalogNumber, specPageIndex, specPageRef: pdfDoc.getPage(specPageIndex).ref })
       continue
     }
 
@@ -256,6 +217,7 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
       warnings.push(`Spec sheet file not found for ${group.catalogNumber}`)
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, 'File not found on disk', fonts)
       pageContexts.push(specPageCtx)
+      tocSections.push({ type: group.type, totalQty: group.totalQty, manufacturer: group.manufacturer, catalogNumber: group.catalogNumber, specPageIndex, specPageRef: pdfDoc.getPage(specPageIndex).ref })
       continue
     }
 
@@ -266,6 +228,7 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
       warnings.push(`Could not read spec sheet for ${group.catalogNumber}`)
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, 'File read error', fonts)
       pageContexts.push(specPageCtx)
+      tocSections.push({ type: group.type, totalQty: group.totalQty, manufacturer: group.manufacturer, catalogNumber: group.catalogNumber, specPageIndex, specPageRef: pdfDoc.getPage(specPageIndex).ref })
       continue
     }
 
@@ -294,6 +257,7 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
           isSpecSheetPage: true,
         })
       }
+      tocSections.push({ type: group.type, totalQty: group.totalQty, manufacturer: group.manufacturer, catalogNumber: group.catalogNumber, specPageIndex, specPageRef: pdfDoc.getPage(specPageIndex).ref })
     } catch (err) {
       const reason = err instanceof Error && err.message === 'Zero-page PDF'
         ? 'PDF contains no pages'
@@ -301,6 +265,7 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
       warnings.push(`Could not embed spec sheet for ${group.catalogNumber}: ${reason}`)
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, reason, fonts)
       pageContexts.push(specPageCtx)
+      tocSections.push({ type: group.type, totalQty: group.totalQty, manufacturer: group.manufacturer, catalogNumber: group.catalogNumber, specPageIndex, specPageRef: pdfDoc.getPage(specPageIndex).ref })
     }
   }
 
@@ -340,14 +305,14 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
     addHeaderFooter(page, fonts, headerOpts)
   }
 
-  // Fill TOC (page index 1)
+  // Fill TOC (page index 1) — links point directly to first spec sheet page per group
   const tocEntries: TocEntry[] = tocSections.map(s => ({
     type: s.type,
     qty: s.totalQty,
     manufacturer: s.manufacturer,
     catalogNumber: s.catalogNumber,
-    displayPageNumber: s.dividerPageIndex + 1,  // 1-based
-    pageRef: s.dividerPageRef,
+    displayPageNumber: s.specPageIndex + 1,  // 1-based
+    pageRef: s.specPageRef,
   }))
 
   buildTableOfContents(pdfDoc, tocPage, tocEntries, fonts)
