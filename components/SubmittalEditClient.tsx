@@ -3,6 +3,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import ProductConfigurator from './ProductConfigurator'
 
+// ── Branding types ────────────────────────────────────────────────────────────
+
+interface BrandingData {
+  companyName: string
+  address: string
+  phone: string
+  email: string
+  website: string
+  logoBase64: string | null
+  logoMimeType: string | null
+  preparedByName: string
+  preparedByTitle: string
+  preparedByPhone: string
+  preparedByEmail: string
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface Product {
@@ -93,6 +109,15 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
   const [pdfUrl, setPdfUrl] = useState(initial.pdfUrl)
   const [status, setStatus] = useState(initial.status)
 
+  // Company branding (persisted singleton)
+  const [branding, setBranding] = useState<BrandingData>({
+    companyName: '', address: '', phone: '', email: '', website: '',
+    logoBase64: null, logoMimeType: null,
+    preparedByName: '', preparedByTitle: '', preparedByPhone: '', preparedByEmail: '',
+  })
+  const [brandingSaving, setBrandingSaving] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+
   // Inline cell editing
   const [editingCell, setEditingCell] = useState<{ itemId: string; field: EditableField } | null>(null)
   const [cellValues, setCellValues] = useState<Record<string, Record<string, string>>>({})
@@ -133,6 +158,52 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [])
+
+  // ── Load company branding on mount ────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/branding')
+      .then(r => r.json())
+      .then(d => {
+        if (d && typeof d === 'object') {
+          setBranding({
+            companyName:     d.companyName     ?? '',
+            address:         d.address         ?? '',
+            phone:           d.phone           ?? '',
+            email:           d.email           ?? '',
+            website:         d.website         ?? '',
+            logoBase64:      d.logoBase64       ?? null,
+            logoMimeType:    d.logoMimeType     ?? null,
+            preparedByName:  d.preparedByName  ?? '',
+            preparedByTitle: d.preparedByTitle ?? '',
+            preparedByPhone: d.preparedByPhone ?? '',
+            preparedByEmail: d.preparedByEmail ?? '',
+          })
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  async function saveBranding(next: BrandingData) {
+    setBrandingSaving(true)
+    await fetch('/api/branding', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(next),
+    }).catch(() => {})
+    setBrandingSaving(false)
+  }
+
+  function handleLogoFile(file: File) {
+    if (!['image/png', 'image/jpeg'].includes(file.type)) return
+    const reader = new FileReader()
+    reader.onload = async e => {
+      const dataUri = e.target?.result as string
+      const next = { ...branding, logoBase64: dataUri, logoMimeType: file.type }
+      setBranding(next)
+      await saveBranding(next)
+    }
+    reader.readAsDataURL(file)
+  }
 
   // ── Product search for add form ────────────────────────────────────────────
   useEffect(() => {
@@ -571,6 +642,153 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
           </ul>
         </div>
       )}
+
+      {/* Cover Page Designer */}
+      <div style={{ background: '#fff', border: '1px solid #e0e0e0', marginBottom: 20 }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>Cover Page</span>
+          <span style={{ fontSize: 11, color: '#888' }}>— company info saved across all submittals</span>
+          {brandingSaving && <span style={{ fontSize: 11, color: '#0078d4', marginLeft: 'auto' }}>Saving…</span>}
+        </div>
+        <div style={{ padding: 16, display: 'flex', gap: 24 }}>
+
+          {/* Left: fields */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Logo upload */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>Company Logo</label>
+              <div
+                onClick={() => logoInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleLogoFile(f) }}
+                style={{
+                  border: '1.5px dashed #ccc',
+                  borderRadius: 4,
+                  padding: '18px 12px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  background: '#fafafa',
+                  position: 'relative',
+                }}
+              >
+                {branding.logoBase64 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center' }}>
+                    <img src={branding.logoBase64} alt="logo" style={{ maxHeight: 48, maxWidth: 200, objectFit: 'contain' }} />
+                    <button
+                      onClick={e => { e.stopPropagation(); const next = { ...branding, logoBase64: null, logoMimeType: null }; setBranding(next); saveBranding(next) }}
+                      style={{ background: 'none', border: '1px solid #ccc', padding: '2px 8px', cursor: 'pointer', fontSize: 11, color: '#666' }}
+                    >Remove</button>
+                  </div>
+                ) : (
+                  <span style={{ fontSize: 12, color: '#888' }}>Click or drag a PNG / JPG logo here</span>
+                )}
+              </div>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoFile(f) }}
+              />
+            </div>
+
+            {/* Company fields */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
+              {([
+                ['companyName', 'Company Name'],
+                ['address',     'Address'],
+                ['phone',       'Company Phone'],
+                ['email',       'Company Email'],
+                ['website',     'Website'],
+              ] as [keyof BrandingData, string][]).map(([field, label]) => (
+                <div key={field} style={field === 'address' ? { gridColumn: '1 / -1' } : {}}>
+                  <label style={labelStyle}>{label}</label>
+                  <input
+                    type="text"
+                    value={(branding[field] as string) ?? ''}
+                    onChange={e => setBranding(prev => ({ ...prev, [field]: e.target.value }))}
+                    onBlur={() => saveBranding(branding)}
+                    style={{ width: '100%', border: '1px solid #ccc', padding: '6px 10px', fontSize: 13, boxSizing: 'border-box', outline: 'none' }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Prepared By fields */}
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #eee' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                Prepared By (your card — appears bottom-right of cover)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
+                {([
+                  ['preparedByName',  'Your Name'],
+                  ['preparedByTitle', 'Title / Role'],
+                  ['preparedByPhone', 'Your Phone'],
+                  ['preparedByEmail', 'Your Email'],
+                ] as [keyof BrandingData, string][]).map(([field, label]) => (
+                  <div key={field}>
+                    <label style={labelStyle}>{label}</label>
+                    <input
+                      type="text"
+                      value={(branding[field] as string) ?? ''}
+                      onChange={e => setBranding(prev => ({ ...prev, [field]: e.target.value }))}
+                      onBlur={() => saveBranding(branding)}
+                      style={{ width: '100%', border: '1px solid #ccc', padding: '6px 10px', fontSize: 13, boxSizing: 'border-box', outline: 'none' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: live preview */}
+          <div style={{ width: 200, flexShrink: 0 }}>
+            <label style={labelStyle}>Preview</label>
+            <div style={{
+              border: '1px solid #d0d0d0',
+              background: '#fff',
+              padding: '12px 10px',
+              fontSize: 9,
+              fontFamily: 'serif',
+              minHeight: 260,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 4,
+              color: '#222',
+            }}>
+              {branding.logoBase64 && (
+                <img src={branding.logoBase64} alt="" style={{ maxWidth: '100%', maxHeight: 48, objectFit: 'contain', marginBottom: 4 }} />
+              )}
+              {branding.companyName && (
+                <div style={{ fontWeight: 700, fontSize: 11, textAlign: 'center' }}>{branding.companyName}</div>
+              )}
+              {[branding.address, branding.phone, branding.email, branding.website].filter(Boolean).length > 0 && (
+                <div style={{ color: '#666', fontSize: 8, textAlign: 'center', lineHeight: 1.4 }}>
+                  {[branding.address, branding.phone, branding.email, branding.website].filter(Boolean).join(' · ')}
+                </div>
+              )}
+              <div style={{ width: '100%', borderTop: '1px solid #222', margin: '6px 0' }} />
+              <div style={{ fontWeight: 700, fontSize: 10, letterSpacing: '0.05em' }}>LIGHTING SUBMITTAL</div>
+              <div style={{ width: '100%', borderTop: '0.5px solid #aaa', margin: '4px 0' }} />
+              {/* Bottom two-column preview */}
+              <div style={{ width: '100%', display: 'flex', gap: 4, marginTop: 4 }}>
+                <div style={{ flex: 1, fontSize: 7, lineHeight: 1.5 }}>
+                  {projectFields.projectName && <div style={{ fontWeight: 700, fontSize: 8 }}>{projectFields.projectName}</div>}
+                  {projectFields.clientName && <div style={{ color: '#555' }}>Client: {projectFields.clientName}</div>}
+                </div>
+                {branding.preparedByName && (
+                  <div style={{ fontSize: 7, lineHeight: 1.5, color: '#666', textAlign: 'right' }}>
+                    <div style={{ color: '#aaa', fontSize: 6 }}>PREPARED BY</div>
+                    <div style={{ fontWeight: 700, fontSize: 8, color: '#222' }}>{branding.preparedByName}</div>
+                    {branding.preparedByTitle && <div>{branding.preparedByTitle}</div>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Project Info */}
       <div style={{ background: '#fff', border: '1px solid #e0e0e0', marginBottom: 20 }}>

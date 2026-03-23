@@ -478,3 +478,19 @@ model OrderingMatrix {
   @@unique([manufacturerId, familyName])
   @@index([manufacturerId])
 }
+
+model CompanyBranding {
+  id              String   @id @default(cuid())
+  companyName     String?
+  address         String?
+  phone           String?
+  email           String?
+  website         String?
+  logoBase64      String?  @db.Text // data URI: "data:image/png;base64,..."
+  logoMimeType    String?  // "image/png" | "image/jpeg"
+  preparedByName  String?  // "Tyler Gilstrap"
+  preparedByTitle String?  // "Outside Sales Representative"
+  preparedByPhone String?
+  preparedByEmail String?
+  updatedAt       DateTime @updatedAt
+}

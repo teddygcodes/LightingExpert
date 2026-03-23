@@ -1,166 +1,184 @@
 import { PDFDocument, PDFFont, rgb } from 'pdf-lib'
-import * as fs from 'fs'
-import * as path from 'path'
 
-const BLACK = rgb(0, 0, 0)
-const DARK = rgb(0.1, 0.1, 0.1)
-const GRAY = rgb(0.42, 0.42, 0.42)
-const LIGHT_GRAY = rgb(0.92, 0.92, 0.92)
-
-const LOGO_ZONE_H = 120
-const LOGO_ZONE_Y = 792 - LOGO_ZONE_H  // 672
+const BLACK      = rgb(0,    0,    0   )
+const DARK       = rgb(0.1,  0.1,  0.1 )
+const GRAY       = rgb(0.45, 0.45, 0.45)
+const FAINT_GRAY = rgb(0.75, 0.75, 0.75)
 
 export interface CoverSheetData {
+  // Per-submittal project fields
   projectName: string
   projectAddress?: string | null
   clientName?: string | null
   contractorName?: string | null
-  preparedBy?: string | null
+  preparedBy?: string | null       // legacy — unused in new layout
+  preparedFor?: string | null
   date: string
   revisionNumber: number
+  // Company branding (persisted singleton)
+  companyName?: string | null
+  companyAddress?: string | null
+  companyPhone?: string | null
+  companyEmail?: string | null
+  companyWebsite?: string | null
+  logoBase64?: string | null       // full data URI "data:image/png;base64,..."
+  logoMimeType?: string | null     // "image/png" | "image/jpeg"
+  // Personal prepared-by card
+  preparedByName?: string | null
+  preparedByTitle?: string | null
+  preparedByPhone?: string | null
+  preparedByEmail?: string | null
+}
+
+// Draw centered text, returns the text width
+function drawCentered(
+  page: ReturnType<PDFDocument['addPage']>,
+  text: string,
+  y: number,
+  font: PDFFont,
+  size: number,
+  color: ReturnType<typeof rgb>,
+  pageWidth: number,
+  marginX = 36,
+) {
+  const w = font.widthOfTextAtSize(text, size)
+  const x = Math.max(marginX, (pageWidth - w) / 2)
+  page.drawText(text, { x, y, font, size, color })
+  return w
 }
 
 export async function buildCoverSheet(
   pdfDoc: PDFDocument,
   data: CoverSheetData,
   fonts: { regular: PDFFont; bold: PDFFont },
-  showBranding = true
 ): Promise<void> {
   const page = pdfDoc.addPage([612, 792])
   const { width } = page.getSize()
   const { regular, bold } = fonts
 
-  // ── Logo zone ─────────────────────────────────────────────────────
-  const logoPaths = [
-    path.join(process.cwd(), 'public', 'atlantiskb-logo.png'),
-    path.join(process.cwd(), 'public', 'atlantiskb-logo.jpg'),
-  ]
-  let logoEmbedded = false
-  for (const logoPath of logoPaths) {
-    if (!fs.existsSync(logoPath)) continue
+  // ─────────────────────────────────────────────────────────────────────
+  // TOP SECTION — company branding (centered, flows top-down)
+  // ─────────────────────────────────────────────────────────────────────
+
+  let y = 752
+
+  // Logo
+  const LOGO_MAX_W = 150
+  const LOGO_MAX_H = 90
+
+  if (data.logoBase64) {
     try {
-      const logoBytes = fs.readFileSync(logoPath)
-      const logoImage = logoPath.endsWith('.png')
-        ? await pdfDoc.embedPng(logoBytes)
-        : await pdfDoc.embedJpg(logoBytes)
-      const maxH = LOGO_ZONE_H - 20   // 10pt padding top + bottom
-      const maxW = 540                 // content width (36pt margins each side)
-      const scale = Math.min(maxW / logoImage.width, maxH / logoImage.height)
-      const imgW = logoImage.width * scale
-      const imgH = logoImage.height * scale
-      page.drawImage(logoImage, {
-        x: (width - imgW) / 2,
-        y: LOGO_ZONE_Y + (LOGO_ZONE_H - imgH) / 2,
-        width: imgW,
-        height: imgH,
-      })
-      logoEmbedded = true
-      break
-    } catch { /* fall through to text fallback */ }
+      const b64 = data.logoBase64.replace(/^data:[^;]+;base64,/, '')
+      const imgBytes = Buffer.from(b64, 'base64')
+      const isPng = (data.logoMimeType ?? '').includes('png')
+      const img = isPng ? await pdfDoc.embedPng(imgBytes) : await pdfDoc.embedJpg(imgBytes)
+      const scale = Math.min(LOGO_MAX_W / img.width, LOGO_MAX_H / img.height)
+      const imgW = img.width  * scale
+      const imgH = img.height * scale
+      const imgX = (width - imgW) / 2
+      const imgY = y - imgH
+      // White backdrop so any non-transparent logo background blends into the page
+      page.drawRectangle({ x: imgX, y: imgY, width: imgW, height: imgH, color: rgb(1, 1, 1) })
+      page.drawImage(img, { x: imgX, y: imgY, width: imgW, height: imgH })
+      y -= imgH + 10
+    } catch { /* skip */ }
   }
 
-  if (!logoEmbedded) {
-    const brand = 'ATLANTIS KB'
-    const brandW = bold.widthOfTextAtSize(brand, 28)
-    page.drawText(brand, {
-      x: (width - brandW) / 2,
-      y: LOGO_ZONE_Y + (LOGO_ZONE_H - 28) / 2,
-      font: bold,
-      size: 28,
-      color: BLACK,
-    })
+  // Company name
+  if (data.companyName) {
+    drawCentered(page, data.companyName, y, bold, 16, DARK, width)
+    y -= 22
   }
 
-  // Bold dark rule below logo zone
-  page.drawLine({
-    start: { x: 36, y: LOGO_ZONE_Y },
-    end: { x: width - 36, y: LOGO_ZONE_Y },
-    thickness: 2,
-    color: DARK,
+  // Company contact lines (one per non-empty value)
+  for (const line of [data.companyAddress, data.companyPhone, data.companyEmail, data.companyWebsite]) {
+    if (!line) continue
+    drawCentered(page, line, y, regular, 10, GRAY, width)
+    y -= 14
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // TITLE BAND — centered
+  // ─────────────────────────────────────────────────────────────────────
+
+  y -= 28
+
+  drawCentered(page, 'LIGHTING SUBMITTAL', y, bold, 28, BLACK, width)
+
+  // ─────────────────────────────────────────────────────────────────────
+  // BOTTOM SECTION — two columns, anchored at fixed Y
+  // ─────────────────────────────────────────────────────────────────────
+
+  const BASE_Y    = 310   // both columns start here and flow downward
+  const LEFT_X    = 36
+  const RIGHT_X   = 330   // right column start
+  const LINE_SM   = 13    // spacing for 9-10pt lines
+  const LINE_MD   = 18    // spacing for 12-14pt lines
+
+  // ── Left: project details ───────────────────────────────────────────
+  const revStr = `Rev ${String(data.revisionNumber).padStart(2, '0')}`
+  let ly = BASE_Y
+
+  // Project name — bold 14pt
+  page.drawText(data.projectName, { x: LEFT_X, y: ly, font: bold, size: 14, color: DARK })
+  ly -= LINE_MD
+
+  // Address — no label
+  if (data.projectAddress) {
+    page.drawText(data.projectAddress, { x: LEFT_X, y: ly, font: regular, size: 10, color: DARK })
+    ly -= LINE_SM
+  }
+
+  // Client — labeled
+  if (data.clientName) {
+    page.drawText(`Client: ${data.clientName}`, { x: LEFT_X, y: ly, font: regular, size: 10, color: DARK })
+    ly -= LINE_SM
+  }
+
+  // Contractor — labeled
+  if (data.contractorName) {
+    page.drawText(`Contractor: ${data.contractorName}`, { x: LEFT_X, y: ly, font: regular, size: 10, color: DARK })
+    ly -= LINE_SM
+  }
+
+  // Date · Rev — gray
+  page.drawText(`${data.date}  ·  ${revStr}`, { x: LEFT_X, y: ly, font: regular, size: 10, color: GRAY })
+
+  // ── Right: prepared by card ─────────────────────────────────────────
+  const hasPreparedBy = !!(data.preparedByName || data.preparedByTitle || data.preparedByPhone || data.preparedByEmail)
+
+  if (hasPreparedBy) {
+    let ry = BASE_Y
+
+    // "PREPARED BY" label — small gray caps
+    page.drawText('PREPARED BY', { x: RIGHT_X, y: ry, font: regular, size: 8, color: GRAY })
+    ry -= 14
+
+    // Name — bold 12pt
+    if (data.preparedByName) {
+      page.drawText(data.preparedByName, { x: RIGHT_X, y: ry, font: bold, size: 12, color: DARK })
+      ry -= LINE_MD
+    }
+
+    // Title, phone, email — regular 9pt gray
+    for (const line of [data.preparedByTitle, data.preparedByPhone, data.preparedByEmail]) {
+      if (!line) continue
+      page.drawText(line, { x: RIGHT_X, y: ry, font: regular, size: 9, color: GRAY })
+      ry -= LINE_SM
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // FOOTER
+  // ─────────────────────────────────────────────────────────────────────
+
+  const brand  = 'Prepared with Atlantis KB'
+  const brandW = regular.widthOfTextAtSize(brand, 7)
+  page.drawText(brand, {
+    x: (width - brandW) / 2,
+    y: 18,
+    font: regular,
+    size: 7,
+    color: FAINT_GRAY,
   })
-
-  // ── Title ─────────────────────────────────────────────────────────
-  const title = 'LIGHTING SUBMITTAL'
-  const titleW = bold.widthOfTextAtSize(title, 22)
-  page.drawText(title, {
-    x: (width - titleW) / 2,
-    y: 628,
-    font: bold,
-    size: 22,
-    color: BLACK,
-  })
-
-  // ── Project info table ────────────────────────────────────────────
-  const revStr = String(data.revisionNumber).padStart(2, '0')
-  const infoRows: [string, string][] = [
-    ['PROJECT NAME', data.projectName],
-    ['PROJECT ADDRESS', data.projectAddress || '—'],
-    ['CLIENT', data.clientName || '—'],
-    ['CONTRACTOR', data.contractorName || '—'],
-    ['PREPARED BY', data.preparedBy || '—'],
-    ['DATE', data.date],
-    ['REVISION', `Rev ${revStr}`],
-  ]
-
-  const labelX = 36
-  const valueX = 190
-  const rowH = 26
-  let y = 602
-
-  for (const [label, value] of infoRows) {
-    page.drawRectangle({ x: 36, y: y - 5, width: 540, height: rowH, color: LIGHT_GRAY })
-    page.drawText(label, { x: labelX + 6, y: y + 6, font: bold, size: 9, color: DARK })
-    page.drawText(value, { x: valueX, y: y + 6, font: regular, size: 9, color: BLACK })
-    y -= rowH + 2
-  }
-
-  // ── Approval block ────────────────────────────────────────────────
-  y -= 24
-  page.drawText('APPROVAL STATUS', { x: 36, y, font: bold, size: 10, color: BLACK })
-  y -= 18
-
-  page.drawRectangle({ x: 36, y: y - 42, width: 540, height: 58, color: LIGHT_GRAY })
-
-  const approvalOptions = ['APPROVED', 'APPROVED AS NOTED', 'REVISE AND RESUBMIT', 'REJECTED']
-  const colW = 135
-  for (let i = 0; i < approvalOptions.length; i++) {
-    const ax = 44 + i * colW
-    page.drawRectangle({
-      x: ax,
-      y: y - 10,
-      width: 10,
-      height: 10,
-      borderColor: DARK,
-      borderWidth: 0.8,
-      color: rgb(1, 1, 1),
-    })
-    page.drawText(approvalOptions[i], {
-      x: ax + 14,
-      y: y - 7,
-      font: regular,
-      size: 8,
-      color: BLACK,
-    })
-  }
-
-  // ── Signature lines ───────────────────────────────────────────────
-  y -= 70
-  page.drawLine({ start: { x: 36, y }, end: { x: 260, y }, thickness: 0.5, color: DARK })
-  page.drawLine({ start: { x: 290, y }, end: { x: 576, y }, thickness: 0.5, color: DARK })
-  y -= 14
-  page.drawText('Signature', { x: 36, y, font: regular, size: 8, color: GRAY })
-  page.drawText('Date', { x: 290, y, font: regular, size: 8, color: GRAY })
-
-  // ── Branding ──────────────────────────────────────────────────────
-  if (showBranding) {
-    const brand = 'Prepared with Atlantis KB'
-    const brandW = regular.widthOfTextAtSize(brand, 8)
-    page.drawText(brand, {
-      x: (width - brandW) / 2,
-      y: 20,
-      font: regular,
-      size: 8,
-      color: LIGHT_GRAY,
-    })
-  }
 }

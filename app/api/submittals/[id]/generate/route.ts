@@ -79,18 +79,32 @@ export async function POST(
     }
   })
 
+  const branding = await prisma.companyBranding.findFirst()
+
   const coverData = {
     projectName: submittal.projectName,
     projectAddress: submittal.projectAddress ?? undefined,
     clientName: submittal.clientName ?? undefined,
     contractorName: submittal.contractorName ?? undefined,
     preparedBy: submittal.preparedBy ?? undefined,
+    preparedFor: submittal.preparedFor ?? undefined,
     date: new Date().toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     }),
     revisionNumber: submittal.revisionNumber,
+    companyName:     branding?.companyName     ?? undefined,
+    companyAddress:  branding?.address         ?? undefined,
+    companyPhone:    branding?.phone           ?? undefined,
+    companyEmail:    branding?.email           ?? undefined,
+    companyWebsite:  branding?.website         ?? undefined,
+    logoBase64:      branding?.logoBase64      ?? undefined,
+    logoMimeType:    branding?.logoMimeType    ?? undefined,
+    preparedByName:  branding?.preparedByName  ?? undefined,
+    preparedByTitle: branding?.preparedByTitle ?? undefined,
+    preparedByPhone: branding?.preparedByPhone ?? undefined,
+    preparedByEmail: branding?.preparedByEmail ?? undefined,
   }
 
   try {
@@ -98,7 +112,6 @@ export async function POST(
       submittalId: id,
       coverData,
       fixtures,
-      showBranding: true,
     })
 
     await prisma.submittal.update({
