@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, PageSizes } from 'pdf-lib'
+import { PDFDocument, PDFPage, PDFName, PDFArray, StandardFonts, PageSizes } from 'pdf-lib'
 import * as fs from 'fs'
 import * as path from 'path'
 import { buildCoverSheet, CoverSheetData } from './cover-sheet'
@@ -62,6 +62,44 @@ interface PageContext {
   isHeaderable: boolean
   fixtureType?: string
   fixtureDescription?: string
+  catalogString?: string     // catalog number shown in dark spec-sheet header
+  isSpecSheetPage?: boolean  // true → Style B dark header + content scaling
+}
+
+const SPEC_HEADER_HEIGHT = 45
+const SPEC_FOOTER_CLEARANCE = 30
+
+// Scale down existing page content to fit within [footerClearance, height - headerHeight].
+// Wraps the existing content streams in a save/restore + matrix transform.
+function scalePageContentForHeader(page: PDFPage, headerHeight: number, footerHeight: number): void {
+  const { height } = page.getSize()
+  const scale = (height - headerHeight - footerHeight) / height
+  const yOffset = footerHeight
+
+  const transformPrefix = `q ${scale.toFixed(4)} 0 0 ${scale.toFixed(4)} 0 ${yOffset.toFixed(4)} cm\n`
+  const transformSuffix = `\nQ\n`
+
+  const doc = page.doc
+  const contentsRef = page.node.get(PDFName.of('Contents'))
+
+  const prefixStream = doc.context.stream(transformPrefix)
+  const suffixStream = doc.context.stream(transformSuffix)
+  const prefixRef = doc.context.register(prefixStream)
+  const suffixRef = doc.context.register(suffixStream)
+
+  if (contentsRef instanceof PDFArray) {
+    const arr = PDFArray.withContext(doc.context)
+    arr.push(prefixRef)
+    for (const ref of contentsRef.asArray()) arr.push(ref)
+    arr.push(suffixRef)
+    page.node.set(PDFName.of('Contents'), arr)
+  } else if (contentsRef) {
+    const arr = PDFArray.withContext(doc.context)
+    arr.push(prefixRef)
+    arr.push(contentsRef)
+    arr.push(suffixRef)
+    page.node.set(PDFName.of('Contents'), arr)
+  }
 }
 
 // Internal grouping for fixture sections
@@ -191,10 +229,18 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
     })
 
     // Spec sheet pages
+    const specPageCtx: PageContext = {
+      isHeaderable: true,
+      fixtureType: group.type,
+      fixtureDescription: group.description,
+      catalogString: group.catalogOverride ?? group.catalogNumber,
+      isSpecSheetPage: true,
+    }
+
     if (!group.specSheetPath) {
       warnings.push(`Missing spec sheet for ${group.catalogNumber}`)
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, 'Spec sheet not cached', fonts)
-      pageContexts.push({ isHeaderable: true, fixtureType: group.type, fixtureDescription: group.description })
+      pageContexts.push(specPageCtx)
       continue
     }
 
@@ -202,14 +248,14 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
     if (!absolutePath) {
       warnings.push(`Invalid spec sheet path for ${group.catalogNumber} — path traversal rejected`)
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, 'Invalid file path', fonts)
-      pageContexts.push({ isHeaderable: true, fixtureType: group.type, fixtureDescription: group.description })
+      pageContexts.push(specPageCtx)
       continue
     }
 
     if (!fs.existsSync(absolutePath)) {
       warnings.push(`Spec sheet file not found for ${group.catalogNumber}`)
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, 'File not found on disk', fonts)
-      pageContexts.push({ isHeaderable: true, fixtureType: group.type, fixtureDescription: group.description })
+      pageContexts.push(specPageCtx)
       continue
     }
 
@@ -219,7 +265,7 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
     } catch {
       warnings.push(`Could not read spec sheet for ${group.catalogNumber}`)
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, 'File read error', fonts)
-      pageContexts.push({ isHeaderable: true, fixtureType: group.type, fixtureDescription: group.description })
+      pageContexts.push(specPageCtx)
       continue
     }
 
@@ -240,7 +286,13 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
       const copiedPages = await pdfDoc.copyPages(specDoc, indices)
       for (const p of copiedPages) {
         pdfDoc.addPage(p)
-        pageContexts.push({ isHeaderable: true, fixtureType: group.type, fixtureDescription: group.description })
+        pageContexts.push({
+          isHeaderable: true,
+          fixtureType: group.type,
+          fixtureDescription: group.description,
+          catalogString: group.catalogOverride ?? group.catalogNumber,
+          isSpecSheetPage: true,
+        })
       }
     } catch (err) {
       const reason = err instanceof Error && err.message === 'Zero-page PDF'
@@ -248,7 +300,7 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
         : 'PDF could not be embedded (encrypted or corrupt)'
       warnings.push(`Could not embed spec sheet for ${group.catalogNumber}: ${reason}`)
       buildMissingSpecSheetPage(pdfDoc, group.catalogNumber, reason, fonts)
-      pageContexts.push({ isHeaderable: true, fixtureType: group.type, fixtureDescription: group.description })
+      pageContexts.push(specPageCtx)
     }
   }
 
@@ -268,6 +320,12 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
     if (!ctx?.isHeaderable) continue
 
     const displayPageNumber = i + 1
+    const page = pdfDoc.getPage(i)
+
+    if (ctx.isSpecSheetPage) {
+      scalePageContentForHeader(page, SPEC_HEADER_HEIGHT, SPEC_FOOTER_CLEARANCE)
+    }
+
     const headerOpts: HeaderFooterOptions = {
       projectName,
       revisionNumber,
@@ -276,8 +334,10 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
       displayTotalPages,
       fixtureType: ctx.fixtureType,
       fixtureDescription: ctx.fixtureDescription,
+      catalogString: ctx.catalogString,
+      isSpecSheetPage: ctx.isSpecSheetPage,
     }
-    addHeaderFooter(pdfDoc.getPage(i), fonts, headerOpts)
+    addHeaderFooter(page, fonts, headerOpts)
   }
 
   // Fill TOC (page index 1)
