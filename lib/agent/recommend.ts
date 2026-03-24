@@ -68,7 +68,7 @@ export const APPLICATION_DEFAULTS: Record<string, AppDefaults> = {
   parking_garage:     { projectPosture: 'value_engineered',    preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: false },
   parking_lot:        { projectPosture: 'value_engineered',    preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: false },
   garage:             { projectPosture: 'value_engineered',    preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: false },
-  manufacturing:      { projectPosture: 'standard_commercial', preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
+  manufacturing:      { projectPosture: 'standard_commercial', preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: true,  indoorPreferred: true  },
   industrial:         { projectPosture: 'value_engineered',    preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
   gym:                { projectPosture: 'standard_commercial', preferredCCTs: [4000, 5000], minCri: 80,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
   fitness:            { projectPosture: 'standard_commercial', preferredCCTs: [4000, 5000], minCri: 80,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
@@ -286,7 +286,7 @@ const FIXTURE_CLASS_SIGNALS: Partial<Record<string, { positive: string[]; negati
     negative: ['troffer', 'high bay', 'strip', 'canopy'],
   },
   STRIP: {
-    positive: ['strip', 'shop light', 'shoplight', 'industrial strip'],
+    positive: ['strip', 'industrial strip'],
     negative: ['troffer', 'high bay', 'flat panel'],
   },
   LINEAR_SUSPENDED: {

@@ -124,18 +124,14 @@ A. Infer the most likely fixture class.
 Examples:
 - warehouse / gym / high ceiling → HIGH_BAY
 - classroom / office / conference room → TROFFER or FLAT_PANEL
-- parking garage → CANOPY / GARAGE
-- parking lot → AREA_SITE
-- exterior wall → WALL_PACK
-- retail sales floor → TRACK or DOWNLIGHT
-- restroom / break room → DOWNLIGHT or WRAP
-- stairwell → WALL_MOUNT or SURFACE_MOUNT
-- loading dock → FLOOD or WALL_PACK
+- warehouse / industrial / gym / UFO / round high bay → HIGH_BAY
+- classroom / office / conference room → TROFFER or FLAT_PANEL
 - parking garage / covered parking → CANOPY or GARAGE
 - parking lot / exterior area / outdoor site → AREA_SITE
-- loading dock / exterior storage → FLOOD or WALL_PACK
+- exterior wall / loading dock / exterior storage → WALL_PACK or FLOOD
+- retail sales floor → TRACK or DOWNLIGHT
+- restroom / break room / utility room → DOWNLIGHT or WRAP
 - stairwell / corridor / hallway → WALL_MOUNT or SURFACE_MOUNT
-- break room / restroom / utility room → WRAP or SURFACE_MOUNT
 - gym / fitness center → HIGH_BAY or LINEAR_SUSPENDED (ask ceiling height if unclear)
 - restaurant / hotel lobby / hospitality → DOWNLIGHT or PENDANT (premium, dimmable preferred)
 - grocery / supermarket → LINEAR_SUSPENDED or TROFFER (high CRI, 3500K–4000K)

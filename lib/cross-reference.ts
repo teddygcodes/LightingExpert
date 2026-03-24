@@ -481,7 +481,7 @@ RESPONSE FORMAT:
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     })
@@ -514,7 +514,7 @@ RESPONSE FORMAT:
     console.log(`[cross-ref] AI post-filter: ${candidates.length} → ${filtered.length} candidates kept`)
     return filtered
   } catch (err) {
-    console.warn('[cross-ref] AI post-filter failed, keeping all candidates:', err)
+    console.error('[cross-reference] AI post-filter error (filter bypassed):', err)
     return candidates
   }
 }
