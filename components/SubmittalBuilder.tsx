@@ -36,6 +36,7 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ imported: string[]; unmatched: string[] } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Fixture add form
   const [searchQuery, setSearchQuery] = useState('')
@@ -294,7 +295,13 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
             <input
               style={inputStyle}
               value={selectedProduct ? `${selectedProduct.catalogNumber} — ${selectedProduct.displayName ?? ''}` : searchQuery}
-              onChange={e => { setSelectedProduct(null); searchProducts(e.target.value) }}
+              onChange={e => {
+                const q = e.target.value
+                setSelectedProduct(null)
+                setSearchQuery(q)
+                if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+                searchDebounceRef.current = setTimeout(() => searchProducts(q), 300)
+              }}
               placeholder="Search catalog #…"
             />
             {searchError && (
