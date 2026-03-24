@@ -276,7 +276,9 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
       // Simple string similarity
       const sDims = source.dimensions.replace(/[^\d.]/g, ' ').trim().split(/\s+/).map(Number).filter(Boolean).sort()
       const tDims = target.dimensions.replace(/[^\d.]/g, ' ').trim().split(/\s+/).map(Number).filter(Boolean).sort()
-      const allClose = sDims.length > 0 && sDims.every((d, i) => tDims[i] && Math.abs(d - tDims[i]) / d < 0.1)
+      const allClose = sDims.length > 0 &&
+        sDims.length === tDims.length &&
+        sDims.every((d, i) => d > 0 && tDims[i] > 0 && Math.abs(d - tDims[i]) / d < 0.1)
       if (allClose) {
         score += 0.04
         reasons.push('Dimensions are very close')
