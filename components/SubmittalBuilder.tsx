@@ -49,6 +49,9 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
   const [configSelections, setConfigSelections] = useState<Record<string, string>>({})
   const [showConfigurator, setShowConfigurator] = useState(false)
   const [catalogOverride, setCatalogOverride] = useState<string | null>(null)
+  const [addError, setAddError] = useState<string | null>(null)
+  const [searchError, setSearchError] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
 
   // Reset config selections and catalog override whenever a new product is selected
   useEffect(() => {
@@ -78,29 +81,41 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
     if (!file) return
     setImporting(true)
     setImportResult(null)
-    const form = new FormData()
-    form.append('file', file)
-    const res = await fetch(`/api/submittals/${submittalId}/import-schedule`, { method: 'POST', body: form })
-    const json = await res.json()
-    setImportResult(json)
-    setImporting(false)
-    if (json.imported?.length) onRefresh()
-    e.target.value = ''
+    setImportError(null)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`/api/submittals/${submittalId}/import-schedule`, { method: 'POST', body: form })
+      const json = await res.json()
+      if (!res.ok) { setImportError(json.error ?? 'Import failed'); return }
+      setImportResult(json)
+      if (json.imported?.length) onRefresh()
+    } catch {
+      setImportError('Network error — please try again')
+    } finally {
+      setImporting(false)
+      e.target.value = ''
+    }
   }
 
   async function searchProducts(q: string) {
-    setSearchQuery(q)
+    setSearchError(false)
     if (q.length < 2) { setSearchResults([]); return }
-    const res = await fetch(`/api/products?search=${encodeURIComponent(q)}&limit=8`)
-    const json = await res.json()
-    setSearchResults(json.data ?? [])
+    try {
+      const res = await fetch(`/api/products?search=${encodeURIComponent(q)}&limit=8`)
+      if (!res.ok) { setSearchError(true); return }
+      const json = await res.json()
+      setSearchResults(json.data ?? [])
+    } catch {
+      setSearchError(true)
+    }
   }
 
   async function addFixture() {
     if (!selectedProduct || !fixtureType) return
     setAdding(true)
+    setAddError(null)
 
-    // Use ordering matrix override if set; fall back to legacy configOptions build
     let resolvedOverride: string | undefined
     if (catalogOverride) {
       resolvedOverride = catalogOverride
@@ -108,30 +123,40 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
       resolvedOverride = selectedProduct.catalogNumber + '-' + Object.values(configSelections).join('-')
     }
 
-    await fetch(`/api/submittals/${submittalId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'add_item',
-        productId: selectedProduct.id,
-        fixtureType: fixtureType.toUpperCase(),
-        quantity,
-        locationTag: locationTag || null,
-        catalogNumberOverride: resolvedOverride,
-        notes: notes || null,
-      }),
-    })
-    setSelectedProduct(null)
-    setSearchQuery('')
-    setSearchResults([])
-    setFixtureType('')
-    setQuantity(1)
-    setLocationTag('')
-    setNotes('')
-    setConfigSelections({})
-    setCatalogOverride(null)
-    setAdding(false)
-    onRefresh()
+    try {
+      const res = await fetch(`/api/submittals/${submittalId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_item',
+          productId: selectedProduct.id,
+          fixtureType: fixtureType.toUpperCase(),
+          quantity,
+          locationTag: locationTag || null,
+          catalogNumberOverride: resolvedOverride,
+          notes: notes || null,
+        }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        setAddError((json as { error?: string }).error ?? 'Failed to add fixture')
+        return
+      }
+      setSelectedProduct(null)
+      setSearchQuery('')
+      setSearchResults([])
+      setFixtureType('')
+      setQuantity(1)
+      setLocationTag('')
+      setNotes('')
+      setConfigSelections({})
+      setCatalogOverride(null)
+      onRefresh()
+    } catch {
+      setAddError('Network error — please try again')
+    } finally {
+      setAdding(false)
+    }
   }
 
   const inputStyle = {
@@ -235,6 +260,9 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
             )}
           </div>
         )}
+        {importError && (
+          <p style={{ color: '#c00', fontSize: 12, marginTop: 4 }}>{importError}</p>
+        )}
       </div>
 
       {/* Add Fixture */}
@@ -269,6 +297,9 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
               onChange={e => { setSelectedProduct(null); searchProducts(e.target.value) }}
               placeholder="Search catalog #…"
             />
+            {searchError && (
+              <p style={{ color: '#c00', fontSize: 12, marginTop: 4 }}>Search failed — please try again</p>
+            )}
             {searchResults.length > 0 && !selectedProduct && (
               <div style={{ position: 'absolute', zIndex: 20, background: '#fff', border: '1px solid #ccc', width: '100%', maxHeight: 200, overflowY: 'auto', top: '100%' }}>
                 {searchResults.map(p => (
@@ -378,6 +409,9 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
         >
           {adding ? 'Adding…' : '+ Add Fixture'}
         </button>
+        {addError && (
+          <p style={{ color: '#c00', fontSize: 12, marginTop: 4 }}>{addError}</p>
+        )}
       </div>
     </div>
   )
