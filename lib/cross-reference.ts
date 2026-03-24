@@ -120,7 +120,8 @@ function rangeOverlapScore(
   if (overlapHigh < overlapLow) return 0 // no overlap
 
   // Score based on how well they overlap
-  const sourceRange = sHigh - sLow + 1
+  const sourceRange = sHigh - sLow
+  if (sourceRange <= 0) return 1.0  // point value — any overlap is a full match
   const overlapRange = overlapHigh - overlapLow
   const pctOverlap = Math.min(1, overlapRange / sourceRange)
 
