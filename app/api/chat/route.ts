@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     tools: agentTools,
     messages,
     maxTokens: 8192,
-    maxSteps: 5,
+    maxSteps: 3,
     onError: (err) => {
       console.error('[chat route] streamText error:', err)
     },

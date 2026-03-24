@@ -47,7 +47,6 @@ export interface GeneratorInput {
   submittalId: string
   coverData: CoverSheetData
   fixtures: FixtureEntry[]
-  showBranding?: boolean
 }
 
 export interface GeneratorResult {
@@ -162,7 +161,7 @@ export async function generateSubmittalPDF(input: GeneratorInput): Promise<Gener
   // ──────────────────────────────────────────────────────────────────
 
   // Page 0: Cover (not headered)
-  await buildCoverSheet(pdfDoc, input.coverData, fonts, input.showBranding ?? true)
+  await buildCoverSheet(pdfDoc, input.coverData, fonts)
   pageContexts.push({ isHeaderable: false })
 
   // Page 1: TOC — blank page, filled in during Pass 2

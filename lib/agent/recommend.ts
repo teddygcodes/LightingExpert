@@ -65,6 +65,25 @@ export const APPLICATION_DEFAULTS: Record<string, AppDefaults> = {
   healthcare:     { projectPosture: 'standard_commercial', preferredCCTs: [4000],       minCri: 90, dlcPreferred: true,  dimmingPreferred: true,  indoorPreferred: true },
   renovation:     { projectPosture: 'standard_commercial', preferredCCTs: [3500, 4000], minCri: 80, dlcPreferred: true,  dimmingPreferred: true,  indoorPreferred: true },
   default:        { projectPosture: 'standard_commercial', preferredCCTs: [3500, 4000], minCri: 80, dlcPreferred: true,  dimmingPreferred: true,  indoorPreferred: true },
+  parking_garage:     { projectPosture: 'value_engineered',    preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: false },
+  parking_lot:        { projectPosture: 'value_engineered',    preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: false },
+  garage:             { projectPosture: 'value_engineered',    preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: false },
+  manufacturing:      { projectPosture: 'standard_commercial', preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: true,  indoorPreferred: true  },
+  industrial:         { projectPosture: 'value_engineered',    preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
+  gym:                { projectPosture: 'standard_commercial', preferredCCTs: [4000, 5000], minCri: 80,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
+  fitness:            { projectPosture: 'standard_commercial', preferredCCTs: [4000, 5000], minCri: 80,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
+  hotel:              { projectPosture: 'premium_design',      preferredCCTs: [3000, 2700], minCri: 90,  dlcPreferred: false, dimmingPreferred: true,  indoorPreferred: true  },
+  hospitality:        { projectPosture: 'premium_design',      preferredCCTs: [3000, 2700], minCri: 90,  dlcPreferred: false, dimmingPreferred: true,  indoorPreferred: true  },
+  restaurant:         { projectPosture: 'premium_design',      preferredCCTs: [3000, 2700], minCri: 90,  dlcPreferred: false, dimmingPreferred: true,  indoorPreferred: true  },
+  grocery:            { projectPosture: 'standard_commercial', preferredCCTs: [3500, 4000], minCri: 90,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
+  supermarket:        { projectPosture: 'standard_commercial', preferredCCTs: [3500, 4000], minCri: 90,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
+  break_room:         { projectPosture: 'value_engineered',    preferredCCTs: [3500, 4000], minCri: 80,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
+  corridor:           { projectPosture: 'value_engineered',    preferredCCTs: [3500, 4000], minCri: 80,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
+  hallway:            { projectPosture: 'value_engineered',    preferredCCTs: [3500, 4000], minCri: 80,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
+  stairwell:          { projectPosture: 'value_engineered',    preferredCCTs: [4000, 5000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: true  },
+  loading_dock:       { projectPosture: 'value_engineered',    preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: false },
+  exterior:           { projectPosture: 'standard_commercial', preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: false },
+  outdoor:            { projectPosture: 'standard_commercial', preferredCCTs: [5000, 4000], minCri: 70,  dlcPreferred: true,  dimmingPreferred: false, indoorPreferred: false },
 }
 
 // ─── Recommendation Context ───────────────────────────────────────────────────
@@ -267,7 +286,7 @@ const FIXTURE_CLASS_SIGNALS: Partial<Record<string, { positive: string[]; negati
     negative: ['troffer', 'high bay', 'strip', 'canopy'],
   },
   STRIP: {
-    positive: ['strip', 'shop light', 'shoplight', 'industrial strip'],
+    positive: ['strip', 'industrial strip'],
     negative: ['troffer', 'high bay', 'flat panel'],
   },
   LINEAR_SUSPENDED: {
@@ -277,6 +296,33 @@ const FIXTURE_CLASS_SIGNALS: Partial<Record<string, { positive: string[]; negati
   VAPOR_TIGHT: {
     positive: ['vapor tight', 'vaportight', 'vapor-tight'],
     negative: ['troffer', 'high bay', 'wall pack'],
+  },
+  DOWNLIGHT: {
+    positive: [
+      'downlight', 'down light', 'recessed', 'wafer', 'slim', 'pancake',
+      'pot light', 'can light', 'ic-rated', 'ic rated',
+    ],
+    negative: ['troffer', 'high bay', 'strip', 'flat panel', 'wall pack'],
+  },
+  CANOPY: {
+    positive: ['canopy', 'gas station', 'fueling station', 'covered walkway'],
+    negative: ['troffer', 'high bay', 'wall pack', 'flat panel'],
+  },
+  AREA_SITE: {
+    positive: ['area light', 'site light', 'shoe box', 'shoebox', 'parking lot', 'area/site'],
+    negative: ['troffer', 'high bay', 'wall pack', 'canopy'],
+  },
+  WRAP: {
+    positive: ['wrap', 'wraparound', 'wrap-around', 'shop light'],
+    negative: ['troffer', 'high bay', 'flat panel', 'strip'],
+  },
+  SURFACE_MOUNT: {
+    positive: ['surface mount', 'surface-mount', 'j-box', 'jbox', 'flush mount'],
+    negative: ['troffer', 'high bay', 'wall pack', 'pendant', 'recessed'],
+  },
+  WALL_MOUNT: {
+    positive: ['wall mount', 'sconce', 'wall-mount', 'wall mounted'],
+    negative: ['troffer', 'high bay', 'wall pack', 'canopy'],
   },
 }
 
@@ -380,7 +426,7 @@ function enrichWithComparativeRationale(
   ctx: RecommendationContext,
   classMatchMap?: Map<string, ClassMatchResult>
 ): void {
-  const appLabel = ctx.applicationType
+  const appLabel = ctx.applicationType === 'general' ? 'this application' : ctx.applicationType
   const posture = ctx.projectPosture
   const topPick = selected[0]
   if (!topPick) return

@@ -1,4 +1,5 @@
 import { Product, MatchType, CrossRefSource, CanonicalFixtureType, Prisma } from '@prisma/client'
+import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from './db'
 import type { HardRejectReason, CrossRefMatch, CrossRefReject, ComparisonSnapshot } from './types'
 
@@ -120,7 +121,8 @@ function rangeOverlapScore(
   if (overlapHigh < overlapLow) return 0 // no overlap
 
   // Score based on how well they overlap
-  const sourceRange = sHigh - sLow + 1
+  const sourceRange = sHigh - sLow
+  if (sourceRange <= 0) return 1.0  // point value — any overlap is a full match
   const overlapRange = overlapHigh - overlapLow
   const pctOverlap = Math.min(1, overlapRange / sourceRange)
 
@@ -275,7 +277,9 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
       // Simple string similarity
       const sDims = source.dimensions.replace(/[^\d.]/g, ' ').trim().split(/\s+/).map(Number).filter(Boolean).sort()
       const tDims = target.dimensions.replace(/[^\d.]/g, ' ').trim().split(/\s+/).map(Number).filter(Boolean).sort()
-      const allClose = sDims.length > 0 && sDims.every((d, i) => tDims[i] && Math.abs(d - tDims[i]) / d < 0.1)
+      const allClose = sDims.length > 0 &&
+        sDims.length === tDims.length &&
+        sDims.every((d, i) => d > 0 && tDims[i] > 0 && Math.abs(d - tDims[i]) / d < 0.1)
       if (allClose) {
         score += 0.04
         reasons.push('Dimensions are very close')
@@ -403,6 +407,118 @@ function buildComparisonSnapshot(source: Product, target: Product): ComparisonSn
   return { source: srcSnap, target: tgtSnap, deltas }
 }
 
+// ─── AI Post-Filter ───────────────────────────────────────────────────────────
+
+interface AiFilterDecision {
+  catalogNumber: string
+  decision: 'KEEP' | 'REJECT'
+  reason: string
+}
+
+function formatSpecSummary(p: ProductWithManufacturer): string {
+  const parts: string[] = []
+  parts.push(`type: ${p.canonicalFixtureType ?? 'unknown'}`)
+
+  const wattStr = (p.wattageMin != null && p.wattageMax != null)
+    ? `${p.wattageMin}–${p.wattageMax}W`
+    : p.wattage != null ? `${p.wattage}W` : null
+  if (wattStr) parts.push(`wattage: ${wattStr}`)
+
+  const lumStr = (p.lumensMin != null && p.lumensMax != null)
+    ? `${p.lumensMin.toLocaleString()}–${p.lumensMax.toLocaleString()} lm`
+    : p.lumens != null ? `${p.lumens.toLocaleString()} lm` : null
+  if (lumStr) parts.push(`lumens: ${lumStr}`)
+
+  if (p.cri) parts.push(`CRI: ${p.cri}`)
+  if (p.cctOptions.length > 0) parts.push(`CCT: ${p.cctOptions.map(c => `${c}K`).join('/')}`)
+  if (p.environment) parts.push(`environment: ${p.environment}`)
+  if (p.formFactor) parts.push(`formFactor: ${p.formFactor}`)
+  if (p.voltage) parts.push(`voltage: ${p.voltage}`)
+
+  return parts.join(', ')
+}
+
+async function aiPostFilter(
+  source: ProductWithManufacturer,
+  candidates: CrossRefMatch[],
+  candidateProducts: Map<string, ProductWithManufacturer>
+): Promise<CrossRefMatch[]> {
+  if (candidates.length === 0) return candidates
+
+  const anthropic = new Anthropic()
+
+  const sourceSpec = formatSpecSummary(source)
+
+  const candidateLines = candidates.map((c) => {
+    const prod = candidateProducts.get(c.productId)
+    const spec = prod ? formatSpecSummary(prod) : 'specs unavailable'
+    return `  - catalogNumber: "${c.catalogNumber}", score: ${c.confidence}, specs: { ${spec} }`
+  }).join('\n')
+
+  const prompt = `You are a commercial lighting fixture cross-reference expert performing a fixture-class sanity check.
+
+Your job is to review a list of candidate cross-reference matches for a source fixture and decide whether each candidate is a plausible substitute in a commercial lighting project.
+
+SOURCE FIXTURE:
+  catalogNumber: "${source.catalogNumber}"
+  specs: { ${sourceSpec} }
+
+CANDIDATES:
+${candidateLines}
+
+INSTRUCTIONS:
+- Compare each candidate's fixture class and key specs (type, wattage, lumens, CRI, CCT, environment) against the source.
+- KEEP a candidate if it is a plausible functional substitute — similar fixture class, reasonably close lumen/wattage output, compatible environment and CRI.
+- REJECT a candidate only if there is a clear class mismatch (e.g., an indoor troffer matched against an outdoor area light, or a 5W accent fixture matched against a 100W high-bay).
+- Do not reject based on minor spec differences — those are expected and handled by the scoring system.
+- Respond ONLY with a valid JSON array. No markdown, no explanation outside the JSON.
+
+RESPONSE FORMAT:
+[
+  {"catalogNumber": "EXAMPLE-1", "decision": "KEEP", "reason": "Same fixture class and compatible lumen range"},
+  {"catalogNumber": "EXAMPLE-2", "decision": "REJECT", "reason": "Outdoor area light vs indoor troffer — class mismatch"}
+]`
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    })
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : ''
+
+    // Extract JSON array from response (handle any surrounding whitespace or markdown)
+    const jsonMatch = text.match(/\[[\s\S]*\]/)
+    if (!jsonMatch) {
+      console.warn('[cross-ref] AI post-filter: could not parse JSON response, keeping all candidates')
+      return candidates
+    }
+
+    const decisions: AiFilterDecision[] = JSON.parse(jsonMatch[0])
+    const decisionMap = new Map<string, AiFilterDecision>()
+    for (const d of decisions) {
+      decisionMap.set(d.catalogNumber, d)
+    }
+
+    const filtered = candidates.filter((c) => {
+      const decision = decisionMap.get(c.catalogNumber)
+      if (!decision) return true // if AI didn't weigh in, keep it
+      if (decision.decision === 'REJECT') {
+        console.log(`[cross-ref] AI post-filter REJECT ${c.catalogNumber}: ${decision.reason}`)
+        return false
+      }
+      return true
+    })
+
+    console.log(`[cross-ref] AI post-filter: ${candidates.length} → ${filtered.length} candidates kept`)
+    return filtered
+  } catch (err) {
+    console.error('[cross-reference] AI post-filter error (filter bypassed):', err)
+    return candidates
+  }
+}
+
 // ─── Main: Find Matches ───────────────────────────────────────────────────────
 
 type ProductWithManufacturer = Product & {
@@ -471,7 +587,9 @@ export async function findMatches(
 
   const matches: CrossRefMatch[] = []
   const rejects: CrossRefReject[] = []
-  const upserts: Parameters<typeof prisma.crossReference.upsert>[0][] = []
+  const upsertsByProductId = new Map<string, Parameters<typeof prisma.crossReference.upsert>[0]>()
+  // Map from productId → full product record, used by the AI post-filter
+  const candidateProductMap = new Map<string, ProductWithManufacturer>()
 
   for (const target of candidates) {
     const reject = runHardRejects(source, target)
@@ -495,7 +613,7 @@ export async function findMatches(
     const snapshot = buildComparisonSnapshot(source, target)
     const matchReason = reasons.slice(0, 3).join('; ')
 
-    upserts.push({
+    upsertsByProductId.set(target.id, {
       where: { sourceProductId_targetProductId: { sourceProductId: sourceId, targetProductId: target.id } },
       create: {
         sourceProductId: sourceId,
@@ -524,13 +642,24 @@ export async function findMatches(
       matchReason,
       comparisonSnapshot: snapshot,
     })
+
+    candidateProductMap.set(target.id, target)
   }
+
+  // Sort by confidence descending before AI post-filter so the AI sees ranked candidates
+  matches.sort((a, b) => b.confidence - a.confidence)
+
+  // AI post-filter: sanity-check fixture class and spec compatibility
+  const filteredMatches = await aiPostFilter(source, matches, candidateProductMap)
+
+  // Only upsert candidates that survived the AI post-filter
+  const survivingIds = new Set(filteredMatches.map((m) => m.productId))
+  const upserts = Array.from(upsertsByProductId.entries())
+    .filter(([id]) => survivingIds.has(id))
+    .map(([, args]) => args)
 
   // Batch all upserts in parallel instead of sequential awaits
   await Promise.all(upserts.map((args) => prisma.crossReference.upsert(args)))
 
-  // Sort by confidence descending
-  matches.sort((a, b) => b.confidence - a.confidence)
-
-  return { matches, rejects, filterLevel }
+  return { matches: filteredMatches, rejects, filterLevel }
 }

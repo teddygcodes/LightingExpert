@@ -169,9 +169,8 @@ function ChatRow({ chat, active, projects, onAssign, onDelete }: ChatRowProps) {
 }
 
 const navItems = [
-  { href: '/products', label: 'Products' },
-  { href: '/cross-reference', label: 'Cross Reference' },
   { href: '/submittals', label: 'Submittals' },
+  { href: '/products', label: 'Products' },
   { href: '/admin', label: 'Admin / Crawl Log' },
 ]
 

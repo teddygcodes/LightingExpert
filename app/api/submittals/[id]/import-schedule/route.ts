@@ -38,6 +38,10 @@ export async function POST(
   const file = form.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
 
+  if (file.size > 20 * 1024 * 1024) {
+    return NextResponse.json({ error: 'File too large (max 20 MB)' }, { status: 413 })
+  }
+
   const base64 = Buffer.from(await file.arrayBuffer()).toString('base64')
   const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 
@@ -46,11 +50,17 @@ export async function POST(
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
     : { type: 'image', source: { type: 'base64', media_type: file.type || 'image/png', data: base64 } }
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    messages: [{ role: 'user', content: [fileBlock, { type: 'text', text: EXTRACT_PROMPT }] }],
-  })
+  let response
+  try {
+    response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: [fileBlock, { type: 'text', text: EXTRACT_PROMPT }] }],
+    })
+  } catch (err) {
+    console.error('[import-schedule] Anthropic API error:', err)
+    return NextResponse.json({ error: 'Failed to process document. Please try again.' }, { status: 502 })
+  }
 
   const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : ''
 

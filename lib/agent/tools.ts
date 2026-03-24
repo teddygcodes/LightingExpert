@@ -159,7 +159,7 @@ const recommendFixturesSchema = z.object({
     .describe('Filter to a specific manufacturer by slug (e.g. "acuity", "elite"). Also disables cross-manufacturer diversity logic — use when the user explicitly names a brand.'),
   query: z.string().optional()
     .describe('Form factor or size token (e.g. "2x4", "2x2", "1x4"). Pass this when the user specifies a physical size so only that form factor is considered. Do NOT pass general text here — use fixtureType for fixture class.'),
-  limit: z.number().min(1).max(5).optional().describe('Top N results to return. Default 3, max 5.'),
+  limit: z.number().min(1).max(3).optional().describe('Top N results to return. Default 3, max 3.'),
 })
 
 // ─── Tool 1: search_products ──────────────────────────────────────────────────
@@ -476,6 +476,7 @@ export const recommendFixturesTool = tool({
     'Recommend the best-fit fixtures for a specific application and project context. Use this (NOT search_products) when the user asks "what\'s good for X", "recommend a fixture for Y", "what should I use in Z", or similar advisory questions. The tool infers application defaults (CCT, CRI, DLC, posture) and scores candidates by fit — not just keyword match.',
   parameters: recommendFixturesSchema,
   execute: async (params: z.infer<typeof recommendFixturesSchema>) => {
+    console.log('[recommend_fixtures] params:', JSON.stringify(params))
     try {
       const ctx = buildRecommendationContext({
         applicationType: params.applicationType,
@@ -487,29 +488,41 @@ export const recommendFixturesTool = tool({
         minCri: params.minCri,
       })
 
-      // Focused candidate search — indoor, fixture type, DLC preference, CRI tolerance
+      // Focused candidate search — fixture type, DLC preference, CRI tolerance
       let candidates = await searchProducts({
         fixtureType: params.fixtureType,
-        environment: ctx.indoorPreferred ? 'indoor' : 'outdoor',
-        minCri: ctx.minCri > 5 ? ctx.minCri - 5 : undefined,  // slight tolerance
+        minCri: ctx.minCri > 5 ? ctx.minCri - 5 : undefined,
         dlcListed: params.dlcRequired === true ? true : undefined,
         wetLocation: params.wetLocation,
         maxWattage: ctx.maxWattage,
         manufacturerSlug: params.manufacturerSlug,
-        query: params.query,  // form factor token (e.g. "2x4") — filters to that size only
-        limit: 50,  // internal — allows scoring across full pool
+        query: params.query,
+        limit: 50,
       })
 
       if (candidates.length === 0) {
-        // Retry without some filters if no results
+        // Retry without soft filters but preserve manufacturer filter
         const retry = await searchProducts({
           fixtureType: params.fixtureType,
+          manufacturerSlug: params.manufacturerSlug,  // preserve — never drop brand filter on retry
           limit: 50,
         })
         if (retry.length === 0) {
           return { error: `No products found for fixture type ${params.fixtureType ?? 'unspecified'}.` }
         }
         candidates = retry
+      }
+
+      // Hard-filter: if a manufacturer was specified, always enforce it —
+      // the retry fallback drops soft filters but we must never surface
+      // other-manufacturer products when the user named a specific brand.
+      if (params.manufacturerSlug) {
+        candidates = candidates.filter(
+          p => p.manufacturer.slug === params.manufacturerSlug
+        )
+        if (candidates.length === 0) {
+          return { error: `No ${params.manufacturerSlug} products found for fixture type ${params.fixtureType ?? 'unspecified'}.` }
+        }
       }
 
       // ── Fixture class gating ──────────────────────────────────────────────
@@ -537,7 +550,7 @@ export const recommendFixturesTool = tool({
         })
       }
 
-      const ranked = rankCandidates(classifiedCandidates, ctx, Math.min(params.limit ?? 3, 5), !!params.manufacturerSlug, classMatchMap)
+      const ranked = rankCandidates(classifiedCandidates, ctx, Math.min(params.limit ?? 3, 3), !!params.manufacturerSlug, classMatchMap)
 
       return {
         recommendations: ranked.map(c => ({

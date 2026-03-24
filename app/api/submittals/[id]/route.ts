@@ -43,6 +43,21 @@ export async function PUT(
   // Handle item operations
   if (body.action === 'add_item') {
     const { productId, fixtureType, quantity, locationTag, location, mountingHeight, notes, catalogNumberOverride } = body
+    if (!productId || typeof productId !== 'string') {
+      return NextResponse.json({ error: 'productId is required' }, { status: 400 })
+    }
+    if (quantity !== undefined) {
+      const qty = Number(quantity)
+      if (!Number.isInteger(qty) || qty <= 0) {
+        return NextResponse.json({ error: 'quantity must be a positive integer' }, { status: 400 })
+      }
+    }
+    if (fixtureType && fixtureType.length > 50) {
+      return NextResponse.json({ error: 'fixtureType too long' }, { status: 400 })
+    }
+    if (catalogNumberOverride && catalogNumberOverride.length > 200) {
+      return NextResponse.json({ error: 'catalogNumberOverride too long' }, { status: 400 })
+    }
     const maxOrder = await prisma.submittalItem.findFirst({
       where: { submittalId: id },
       orderBy: { sortOrder: 'desc' },
@@ -123,11 +138,15 @@ export async function PUT(
 
   // Update submittal fields
   const { projectName, projectNumber, projectAddress, clientName, contractorName, preparedBy, preparedFor, revision, notes, status } = body
-  const updated = await prisma.submittal.update({
-    where: { id },
-    data: { projectName, projectNumber, projectAddress, clientName, contractorName, preparedBy, preparedFor, revision, notes, status },
-  })
-  return NextResponse.json(updated)
+  try {
+    const updated = await prisma.submittal.update({
+      where: { id },
+      data: { projectName, projectNumber, projectAddress, clientName, contractorName, preparedBy, preparedFor, revision, notes, status },
+    })
+    return NextResponse.json(updated)
+  } catch {
+    return NextResponse.json({ error: 'Submittal not found' }, { status: 404 })
+  }
 }
 
 export async function DELETE(
