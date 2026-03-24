@@ -138,11 +138,15 @@ export async function PUT(
 
   // Update submittal fields
   const { projectName, projectNumber, projectAddress, clientName, contractorName, preparedBy, preparedFor, revision, notes, status } = body
-  const updated = await prisma.submittal.update({
-    where: { id },
-    data: { projectName, projectNumber, projectAddress, clientName, contractorName, preparedBy, preparedFor, revision, notes, status },
-  })
-  return NextResponse.json(updated)
+  try {
+    const updated = await prisma.submittal.update({
+      where: { id },
+      data: { projectName, projectNumber, projectAddress, clientName, contractorName, preparedBy, preparedFor, revision, notes, status },
+    })
+    return NextResponse.json(updated)
+  } catch {
+    return NextResponse.json({ error: 'Submittal not found' }, { status: 404 })
+  }
 }
 
 export async function DELETE(
