@@ -278,6 +278,33 @@ const FIXTURE_CLASS_SIGNALS: Partial<Record<string, { positive: string[]; negati
     positive: ['vapor tight', 'vaportight', 'vapor-tight'],
     negative: ['troffer', 'high bay', 'wall pack'],
   },
+  DOWNLIGHT: {
+    positive: [
+      'downlight', 'down light', 'recessed', 'wafer', 'slim', 'pancake',
+      'pot light', 'can light', 'ic-rated', 'ic rated',
+    ],
+    negative: ['troffer', 'high bay', 'strip', 'flat panel', 'wall pack'],
+  },
+  CANOPY: {
+    positive: ['canopy', 'gas station', 'fueling station', 'covered walkway'],
+    negative: ['troffer', 'high bay', 'wall pack', 'flat panel'],
+  },
+  AREA_SITE: {
+    positive: ['area light', 'site light', 'shoe box', 'shoebox', 'parking lot', 'area/site'],
+    negative: ['troffer', 'high bay', 'wall pack', 'canopy'],
+  },
+  WRAP: {
+    positive: ['wrap', 'wraparound', 'wrap-around', 'shop light'],
+    negative: ['troffer', 'high bay', 'flat panel', 'strip'],
+  },
+  SURFACE_MOUNT: {
+    positive: ['surface mount', 'surface-mount', 'j-box', 'jbox', 'flush mount'],
+    negative: ['troffer', 'high bay', 'wall pack', 'pendant', 'recessed'],
+  },
+  WALL_MOUNT: {
+    positive: ['wall mount', 'sconce', 'wall-mount', 'wall mounted'],
+    negative: ['troffer', 'high bay', 'wall pack', 'canopy'],
+  },
 }
 
 // Returns a fixture-class match result for a product against a requested type.
