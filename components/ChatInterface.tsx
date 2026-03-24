@@ -79,12 +79,15 @@ export default function ChatInterface({ chatId }: Props) {
     try {
       const body: Record<string, unknown> = { messages: msgs }
       if (msgs.length <= 2) body.title = titleFromMessages(msgs)
-      await fetch(`/api/chats/${id}`, {
+      const res = await fetch(`/api/chats/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      window.dispatchEvent(new CustomEvent('chat-updated'))
+      if (!res.ok) console.warn('[ChatInterface] Failed to save chat:', res.status)
+      else window.dispatchEvent(new CustomEvent('chat-updated'))
+    } catch (err) {
+      console.warn('[ChatInterface] Network error saving chat:', err)
     } finally {
       isSavingRef.current = false
     }
