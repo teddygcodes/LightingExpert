@@ -380,7 +380,7 @@ function enrichWithComparativeRationale(
   ctx: RecommendationContext,
   classMatchMap?: Map<string, ClassMatchResult>
 ): void {
-  const appLabel = ctx.applicationType
+  const appLabel = ctx.applicationType === 'general' ? 'this application' : ctx.applicationType
   const posture = ctx.projectPosture
   const topPick = selected[0]
   if (!topPick) return
