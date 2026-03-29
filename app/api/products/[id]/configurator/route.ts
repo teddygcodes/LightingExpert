@@ -166,7 +166,7 @@ export async function GET(
     console.warn(`[configurator] Matrix ${m.id} validation warning: ${validationError}`)
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     hasMatrix: true,
     matrix: {
       id: m.id,
@@ -183,4 +183,6 @@ export async function GET(
       },
     } satisfies OrderingMatrixData,
   })
+  response.headers.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+  return response
 }

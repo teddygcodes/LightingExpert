@@ -310,8 +310,7 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
   }
 
   // Wet location downgrade (soft penalty — not a hard reject)
-  if ((source as unknown as Record<string, unknown>).wetLocation === true &&
-      (target as unknown as Record<string, unknown>).wetLocation !== true) {
+  if (source.wetLocation === true && target.wetLocation !== true) {
     score -= 0.05
     reasons.push('Source is wet-rated; target is not — verify installation environment')
   }

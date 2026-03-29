@@ -242,6 +242,7 @@ export default function ProductBrowser() {
   const [globalSearch, setGlobalSearch] = useState('')
   const [searchResults, setSearchResults] = useState<Product[]>([])
   const [localSearch, setLocalSearch] = useState('')
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   type View = 'manufacturers' | 'categories' | 'products' | 'search'
   const [view, setView] = useState<View>('manufacturers')
@@ -251,8 +252,8 @@ export default function ProductBrowser() {
   useEffect(() => {
     fetch('/api/manufacturers')
       .then((r) => r.json())
-      .then(setManufacturers)
-      .catch(() => setManufacturers([]))
+      .then((data) => { setManufacturers(data); setFetchError(null) })
+      .catch(() => { setManufacturers([]); setFetchError('Failed to load manufacturers') })
   }, [])
 
   const fetchCategories = useCallback(async (manufacturerId: string) => {
@@ -261,8 +262,10 @@ export default function ProductBrowser() {
       const res = await fetch(`/api/categories?manufacturerId=${manufacturerId}`)
       const data = await res.json()
       setAllCategories(Array.isArray(data) ? data : [])
+      setFetchError(null)
     } catch {
       setAllCategories([])
+      setFetchError('Failed to load categories')
     } finally {
       setLoadingCats(false)
     }
@@ -278,8 +281,10 @@ export default function ProductBrowser() {
       const res = await fetch(`/api/products?${params}`)
       const data = await res.json()
       setProducts(data.data ?? [])
+      setFetchError(null)
     } catch {
       setProducts([])
+      setFetchError('Failed to load products')
     } finally {
       setLoadingProducts(false)
     }
@@ -299,8 +304,10 @@ export default function ProductBrowser() {
         const res = await fetch(`/api/products?search=${encodeURIComponent(globalSearch)}&limit=100`)
         const data = await res.json()
         setSearchResults(data.data ?? [])
+        setFetchError(null)
       } catch {
         setSearchResults([])
+        setFetchError('Failed to search products')
       } finally {
         setLoadingProducts(false)
       }
@@ -426,6 +433,14 @@ export default function ProductBrowser() {
           }}
         />
       </div>
+
+      {/* ── Fetch error banner ── */}
+      {fetchError && (
+        <div style={{ padding: '8px 12px', background: '#fff3f3', border: '1px solid #e88',
+                      borderRadius: 4, fontSize: 12, color: '#c00', marginBottom: 12 }}>
+          {fetchError}
+        </div>
+      )}
 
       {/* ── Search results ── */}
       {view === 'search' && (
