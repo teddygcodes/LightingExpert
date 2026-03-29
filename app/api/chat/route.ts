@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server'
 import { LIGHTING_EXPERT_SYSTEM_PROMPT } from '@/lib/agent/system-prompt'
 import { agentTools } from '@/lib/agent/tools'
 import { checkRateLimit } from '@/lib/agent/rate-limit'
+import { chatRequestSchema } from '@/lib/validations'
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -37,23 +38,25 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  let body: { messages?: unknown[] }
+  let rawBody: unknown
   try {
-    body = await req.json()
+    rawBody = await req.json()
   } catch {
     return new Response(
       JSON.stringify({ error: 'Invalid JSON in request body' }),
       { status: 400, headers: { 'Content-Type': 'application/json' } }
     )
   }
-  // Trim: keep last 20 messages; strip tool result content from messages older than 10 from end
-  const allMessages = body.messages ?? []
-  if (allMessages.length > 100) {
+  const parsed = chatRequestSchema.safeParse(rawBody)
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]
     return new Response(
-      JSON.stringify({ error: 'Too many messages in request' }),
+      JSON.stringify({ error: issue.message }),
       { status: 400, headers: { 'Content-Type': 'application/json' } }
     )
   }
+  // Trim: keep last 20 messages; strip tool result content from messages older than 10 from end
+  const allMessages = parsed.data.messages
   const messages = trimMessages(allMessages)
 
   const result = streamText({

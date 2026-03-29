@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/auth'
+import {
+  addItemSchema, removeItemSchema, reorderSchema,
+  updateItemSchema, updateSubmittalSchema, zodError,
+} from '@/lib/validations'
 
 export async function GET(
   _req: NextRequest,
@@ -42,29 +46,10 @@ export async function PUT(
 
   // Handle item operations
   if (body.action === 'add_item') {
-    const { productId, fixtureType, quantity, locationTag, location, mountingHeight, notes, catalogNumberOverride } = body
-    if (!productId || typeof productId !== 'string') {
-      return NextResponse.json({ error: 'productId is required' }, { status: 400 })
-    }
-    if (quantity !== undefined) {
-      const qty = Number(quantity)
-      if (!Number.isInteger(qty) || qty <= 0) {
-        return NextResponse.json({ error: 'quantity must be a positive integer' }, { status: 400 })
-      }
-    }
-    if (fixtureType && fixtureType.length > 50) {
-      return NextResponse.json({ error: 'fixtureType too long' }, { status: 400 })
-    }
-    if (catalogNumberOverride && catalogNumberOverride.length > 200) {
-      return NextResponse.json({ error: 'catalogNumberOverride too long' }, { status: 400 })
-    }
+    const parsed = addItemSchema.safeParse(body)
+    if (!parsed.success) return zodError(parsed)
+    const { productId, fixtureType, quantity, locationTag, location, mountingHeight, notes, catalogNumberOverride } = parsed.data
     const loc = locationTag ?? location
-    if (loc && typeof loc === 'string' && loc.length > 200) {
-      return NextResponse.json({ error: 'location too long (max 200)' }, { status: 400 })
-    }
-    if (notes && typeof notes === 'string' && notes.length > 1000) {
-      return NextResponse.json({ error: 'notes too long (max 1000)' }, { status: 400 })
-    }
     // Atomic sort order increment via transaction
     const item = await prisma.$transaction(async (tx) => {
       const maxOrder = await tx.submittalItem.findFirst({
@@ -76,8 +61,8 @@ export async function PUT(
         data: {
           submittalId: id,
           productId,
-          fixtureType,
-          quantity: quantity || 1,
+          fixtureType: fixtureType ?? '',
+          quantity,
           location: loc,
           mountingHeight,
           notes,
@@ -91,21 +76,25 @@ export async function PUT(
   }
 
   if (body.action === 'remove_item') {
-    await prisma.submittalItem.delete({ where: { id: body.itemId } })
+    const parsed = removeItemSchema.safeParse(body)
+    if (!parsed.success) return zodError(parsed)
+    await prisma.submittalItem.delete({ where: { id: parsed.data.itemId } })
     return NextResponse.json({ ok: true })
   }
 
   if (body.action === 'reorder') {
-    // body.itemId, body.direction: 'up' | 'down'
-    const item = await prisma.submittalItem.findUnique({ where: { id: body.itemId } })
+    const parsed = reorderSchema.safeParse(body)
+    if (!parsed.success) return zodError(parsed)
+    const { itemId, direction } = parsed.data
+    const item = await prisma.submittalItem.findUnique({ where: { id: itemId } })
     if (!item) return NextResponse.json({ error: 'Item not found' }, { status: 404 })
 
     const items = await prisma.submittalItem.findMany({
       where: { submittalId: id },
       orderBy: { sortOrder: 'asc' },
     })
-    const idx = items.findIndex((i) => i.id === body.itemId)
-    const swapIdx = body.direction === 'up' ? idx - 1 : idx + 1
+    const idx = items.findIndex((i) => i.id === itemId)
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
     if (swapIdx < 0 || swapIdx >= items.length) return NextResponse.json({ ok: true })
 
     const swapItem = items[swapIdx]
@@ -117,14 +106,9 @@ export async function PUT(
   }
 
   if (body.action === 'update_item') {
-    const { itemId, fixtureType, quantity, location, notes, catalogNumberOverride } = body
-
-    if (quantity !== undefined) {
-      const qty = Number(quantity)
-      if (!Number.isInteger(qty) || qty <= 0) {
-        return NextResponse.json({ error: 'quantity must be a positive integer' }, { status: 400 })
-      }
-    }
+    const parsed = updateItemSchema.safeParse(body)
+    if (!parsed.success) return zodError(parsed)
+    const { itemId, fixtureType, quantity, location, notes, catalogNumberOverride } = parsed.data
 
     // Verify the item belongs to this submittal before updating
     const existing = await prisma.submittalItem.findFirst({
@@ -147,11 +131,12 @@ export async function PUT(
   }
 
   // Update submittal fields
-  const { projectName, projectNumber, projectAddress, clientName, contractorName, preparedBy, preparedFor, revision, notes, status } = body
+  const parsed = updateSubmittalSchema.safeParse(body)
+  if (!parsed.success) return zodError(parsed)
   try {
     const updated = await prisma.submittal.update({
       where: { id },
-      data: { projectName, projectNumber, projectAddress, clientName, contractorName, preparedBy, preparedFor, revision, notes, status },
+      data: parsed.data,
     })
     return NextResponse.json(updated)
   } catch {

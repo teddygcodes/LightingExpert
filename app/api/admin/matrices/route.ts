@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
-import { MatrixType, SkuTableEntry, validateMatrixFieldPresence } from '@/lib/configurator'
+import { MatrixType, validateMatrixFieldPresence } from '@/lib/configurator'
 import { requireAuth } from '@/lib/auth'
+import { updateMatrixSchema, zodError } from '@/lib/validations'
 
 export async function GET() {
   const authErr = await requireAuth()
@@ -18,29 +19,17 @@ export async function GET() {
   return NextResponse.json(matrices)
 }
 
-const VALID_MATRIX_TYPES: MatrixType[] = ['configurable', 'sku_table', 'hybrid']
-
 export async function PUT(req: NextRequest) {
   const authErr = await requireAuth()
   if (authErr) return authErr
 
   const body = await req.json()
-  const { id, columns, suffixOptions, sampleNumber, confidence, skuTable: skuTableData, matrixType: rawMatrixType } = body
+  const parsed = updateMatrixSchema.safeParse(body)
+  if (!parsed.success) return zodError(parsed)
 
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  const { id, columns, suffixOptions, sampleNumber, confidence, skuTable: skuTableData, matrixType: rawMatrixType } = parsed.data
 
-  // Validate matrixType if provided
-  let matrixType: MatrixType = 'configurable'
-  if (rawMatrixType !== undefined) {
-    if (!VALID_MATRIX_TYPES.includes(rawMatrixType as MatrixType)) {
-      return NextResponse.json(
-        { error: `matrixType must be one of: ${VALID_MATRIX_TYPES.join(', ')}` },
-        { status: 400 }
-      )
-    }
-    matrixType = rawMatrixType as MatrixType
-  }
-
+  const matrixType: MatrixType = rawMatrixType ?? 'configurable'
   const hasColumns = Array.isArray(columns) && columns.length > 0
   const hasSkuTable = Array.isArray(skuTableData) && skuTableData.length > 0
 
@@ -48,30 +37,6 @@ export async function PUT(req: NextRequest) {
   const presenceError = validateMatrixFieldPresence(matrixType, hasColumns, hasSkuTable)
   if (presenceError) {
     return NextResponse.json({ error: presenceError }, { status: 400 })
-  }
-
-  // Validate columns when present
-  if (Array.isArray(columns)) {
-    for (const col of columns) {
-      if (typeof col.position !== 'number') {
-        return NextResponse.json({ error: 'Each column must have a numeric position' }, { status: 400 })
-      }
-      if (!Array.isArray(col.options)) {
-        return NextResponse.json({ error: `Column at position ${col.position} must have an options array` }, { status: 400 })
-      }
-    }
-  }
-
-  // Validate skuTable entries when present
-  if (Array.isArray(skuTableData)) {
-    for (const entry of skuTableData as SkuTableEntry[]) {
-      if (typeof entry.stockPartNumber !== 'string' || !entry.stockPartNumber) {
-        return NextResponse.json({ error: 'Each skuTable entry must have a stockPartNumber string' }, { status: 400 })
-      }
-      if (typeof entry.position !== 'number' || entry.position <= 0) {
-        return NextResponse.json({ error: 'Each skuTable entry must have a numeric position > 0' }, { status: 400 })
-      }
-    }
   }
 
   // Map lowercase matrixType to uppercase Prisma enum
