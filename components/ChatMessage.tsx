@@ -282,7 +282,7 @@ function DisambigList({
                   : null}
                 {(p.wattageMin != null && p.wattageMax != null)
                   ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.wattageMin}–{p.wattageMax}W</span>
-                  : p.wattage != null
+                  : p.wattage != null && p.wattage > 0
                   ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.wattage}W</span>
                   : null}
                 {p.cri != null && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>CRI {p.cri}</span>}

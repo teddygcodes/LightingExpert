@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 export interface FixtureRow {
   id: string
@@ -26,6 +26,9 @@ interface Props {
 
 export default function FixtureScheduleTable({ submittalId, items, onItemsChange }: Props) {
   const [loading, setLoading] = useState<string | null>(null)
+  const [editingCatalog, setEditingCatalog] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
   async function reorder(itemId: string, direction: 'up' | 'down') {
     setLoading(itemId + direction)
@@ -44,6 +47,26 @@ export default function FixtureScheduleTable({ submittalId, items, onItemsChange
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'remove_item', itemId }),
+    })
+    onItemsChange()
+    setLoading(null)
+  }
+
+  function startEditCatalog(item: FixtureRow) {
+    setEditingCatalog(item.id)
+    setEditValue(item.catalogNumberOverride ?? item.product.catalogNumber)
+    setTimeout(() => inputRef.current?.select(), 0)
+  }
+
+  async function commitCatalogEdit(itemId: string, originalCatalog: string) {
+    const trimmed = editValue.trim()
+    setEditingCatalog(null)
+    if (!trimmed || trimmed === originalCatalog) return
+    setLoading(itemId + 'catalog')
+    await fetch(`/api/submittals/${submittalId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_item', itemId, catalogNumberOverride: trimmed }),
     })
     onItemsChange()
     setLoading(null)
@@ -76,8 +99,32 @@ export default function FixtureScheduleTable({ submittalId, items, onItemsChange
         {items.map((item, idx) => (
           <tr key={item.id} style={{ background: idx % 2 === 0 ? '#f9f9f9' : '#fff', borderBottom: '1px solid #e0e0e0' }}>
             <td style={{ padding: '7px 10px', fontWeight: 700, fontFamily: 'monospace' }}>{item.fixtureType}</td>
-            <td style={{ padding: '7px 10px', fontFamily: 'monospace', color: '#d13438' }}>
-              {item.catalogNumberOverride ?? item.product.catalogNumber}
+            <td
+              style={{ padding: '7px 10px', fontFamily: 'monospace', color: '#d13438', cursor: 'pointer' }}
+              title="Click to edit catalog number"
+            >
+              {editingCatalog === item.id ? (
+                <input
+                  ref={inputRef}
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  onBlur={() => commitCatalogEdit(item.id, item.catalogNumberOverride ?? item.product.catalogNumber)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') commitCatalogEdit(item.id, item.catalogNumberOverride ?? item.product.catalogNumber)
+                    if (e.key === 'Escape') setEditingCatalog(null)
+                  }}
+                  style={{
+                    fontFamily: 'monospace', fontSize: 12, color: '#d13438',
+                    background: '#fff8e1', border: '1px solid #f0a500',
+                    padding: '1px 4px', width: '100%', minWidth: 120,
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <span onClick={() => startEditCatalog(item)}>
+                  {item.catalogNumberOverride ?? item.product.catalogNumber}
+                </span>
+              )}
             </td>
             <td style={{ padding: '7px 10px', color: '#333' }}>{item.product.displayName ?? '—'}</td>
             <td style={{ padding: '7px 10px', color: '#6b6b6b' }}>{item.product.manufacturer?.name ?? '—'}</td>
