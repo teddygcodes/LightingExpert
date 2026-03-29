@@ -28,5 +28,7 @@ export async function GET() {
       categories: m.categories,
     }))
 
-  return NextResponse.json(result)
+  const response = NextResponse.json(result)
+  response.headers.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+  return response
 }

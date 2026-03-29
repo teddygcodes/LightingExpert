@@ -49,6 +49,7 @@ export type HardRejectReason =
   | 'voltage_incompatible'
   | 'mounting_incompatible'
   | 'form_factor_incompatible'
+  | 'cct_incompatible'
   | 'category_mismatch'
 
 export interface CrossRefMatch {

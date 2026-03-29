@@ -17,7 +17,9 @@ export async function GET(
   // Strip internal extraction fields — not needed by UI, reduces payload size
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { rawSpecText, specExtractionJson, specEvidenceJson, crawlEvidence, ...publicProduct } = product
-  return NextResponse.json(publicProduct)
+  const response = NextResponse.json(publicProduct)
+  response.headers.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+  return response
 }
 
 export async function PUT(

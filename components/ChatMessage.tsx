@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import ReactMarkdown from 'react-markdown'
@@ -786,7 +786,7 @@ const markdownComponents = {
   hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '12px 0' }} />,
 }
 
-export default function ChatMessage({ message, onAddToSubmittal, onSelectProduct, isStreaming, suppressSpecSheet }: Props) {
+function ChatMessage({ message, onAddToSubmittal, onSelectProduct, isStreaming, suppressSpecSheet }: Props) {
   const isUser = message.role === 'user'
 
   if (isUser) {
@@ -858,3 +858,5 @@ export default function ChatMessage({ message, onAddToSubmittal, onSelectProduct
     </div>
   )
 }
+
+export default memo(ChatMessage)

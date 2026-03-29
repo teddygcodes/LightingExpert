@@ -306,6 +306,7 @@ export default function ChatInterface({ chatId }: Props) {
             <button
               onClick={(e) => handleSubmit(e as unknown as React.FormEvent)}
               disabled={!canSend}
+              aria-label="Send message"
               className="send-btn"
               style={{
                 background: canSend ? 'var(--accent)' : 'var(--border)',

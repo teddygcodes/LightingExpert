@@ -3,6 +3,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from './db'
 import type { HardRejectReason, CrossRefMatch, CrossRefReject, ComparisonSnapshot } from './types'
 
+const CLAUDE_FAST_MODEL = process.env.CLAUDE_FAST_MODEL ?? 'claude-haiku-4-5-20251001'
+
 // Voltage compatibility — UNIVERSAL is compatible with everything
 function voltagesCompatible(a: string | null, b: string | null): boolean {
   if (!a || !b) return true
@@ -68,7 +70,18 @@ function runHardRejects(source: ProductWithManufacturer, target: ProductWithManu
     }
   }
 
-  // 7. Form factor incompatible (only when both are specified)
+  // 7. CCT completely incompatible (zero overlap when both have well-defined options)
+  if (
+    source.cctOptions.length >= 2 && target.cctOptions.length > 0 &&
+    !source.cctOptions.some((c) => target.cctOptions.includes(c))
+  ) {
+    return {
+      reason: 'cct_incompatible',
+      detail: `Zero CCT overlap: source ${source.cctOptions.map(c => `${c}K`).join('/')} vs target ${target.cctOptions.map(c => `${c}K`).join('/')}`,
+    }
+  }
+
+  // 8. Form factor incompatible (only when both are specified)
   if (source.formFactor && target.formFactor && source.formFactor !== target.formFactor) {
     // Only hard-reject for clearly incompatible form factors (2X4 vs 2X2, 4_INCH vs 6_INCH)
     const isTroffer = (ff: string) => ff.startsWith('1X') || ff.startsWith('2X')
@@ -499,7 +512,7 @@ RESPONSE FORMAT:
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: CLAUDE_FAST_MODEL,
       max_tokens: 4096,
       system: 'You are a commercial lighting cross-reference expert. Respond ONLY with a valid JSON array — no markdown, no explanation, no code fences.',
       messages: [{ role: 'user', content: prompt }],

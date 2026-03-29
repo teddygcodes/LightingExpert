@@ -2,9 +2,9 @@
 
 import { useEffect } from 'react'
 
-export default function GlobalError({ error, reset }: { error: Error; reset: () => void }) {
+export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
-    console.error(error)
+    console.error('[GlobalError]', error.digest ?? '', error)
   }, [error])
 
   return (
@@ -13,6 +13,11 @@ export default function GlobalError({ error, reset }: { error: Error; reset: () 
       <div style={{ fontSize: 13, color: '#6b6b6b', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
         An unexpected error occurred. Please try again.
       </div>
+      {error.digest && (
+        <div style={{ fontSize: 11, color: '#999', marginBottom: 16, fontFamily: 'monospace' }}>
+          Error ID: {error.digest}
+        </div>
+      )}
       <button
         onClick={reset}
         style={{ background: '#d13438', color: '#fff', border: 'none', padding: '9px 20px', fontSize: 13, cursor: 'pointer' }}
