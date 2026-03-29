@@ -160,3 +160,63 @@ export function normalizeMountingTypes(raw: string): MountingType[] {
   }
   return types
 }
+
+// ─── Spec Sheet Primary Link Selection ────────────────────────────────────────
+
+// Filename/label patterns that indicate accessory or supplemental documents,
+// not the primary product spec sheet.
+const ACCESSORY_FILENAME_PATTERNS = [
+  /\bela-wg\b/i,        // ELA wire guards
+  /wire[-_]?guard/i,
+  /stem[-_]?kit/i,
+  /\bwpvs\b/i,          // wet protection vandal shield
+  /accessory/i,
+  /accessories/i,
+]
+const ACCESSORY_LABEL_PATTERNS = [
+  /wire[-_]?\s*guard/i,
+  /stem[-_]?\s*kit/i,
+  /accessory/i,
+  /accessories/i,
+]
+
+/**
+ * Given the list of spec sheet links scraped from an Acuity product page,
+ * return the best primary link for this specific productId.
+ *
+ * Priority:
+ * 1. Links whose URL contains this productId (own-product docs over related-product docs)
+ * 2. Exclude known accessory/supplemental filenames and labels
+ * 3. First remaining candidate (order on page is generally most-relevant-first)
+ */
+export function pickBestSpecSheet(
+  links: Array<{ label: string; url: string }>,
+  productId: string,
+): { label: string; url: string } | null {
+  if (!links.length) return null
+
+  // Extract the productId embedded in the Acuity getasset URL
+  // Format: /api/products/getasset/{brand}/{productId}/{assetId}/{file}.pdf
+  function urlProductId(url: string): string | null {
+    const m = url.match(/\/api\/products\/getasset\/[^/]+\/(\d+)\//)
+    return m ? m[1] : null
+  }
+
+  function isAccessory(link: { label: string; url: string }): boolean {
+    const filename = (link.url.split('/').pop() ?? '').split('?')[0]
+    return (
+      ACCESSORY_FILENAME_PATTERNS.some(p => p.test(filename)) ||
+      ACCESSORY_LABEL_PATTERNS.some(p => p.test(link.label))
+    )
+  }
+
+  // Step 1: prefer own-product links
+  const ownLinks = links.filter(l => urlProductId(l.url) === productId)
+  const pool = ownLinks.length > 0 ? ownLinks : links
+
+  // Step 2: exclude accessories from the pool
+  const mainLinks = pool.filter(l => !isAccessory(l))
+  const candidates = mainLinks.length > 0 ? mainLinks : pool
+
+  return candidates[0]
+}

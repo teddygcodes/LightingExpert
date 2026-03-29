@@ -10,6 +10,7 @@ import {
   normalizeDimmingTypes,
   normalizeMountingTypes,
   normalizeFormFactor,
+  pickBestSpecSheet,
 } from './normalize'
 import { saveSpecSheet, getSpecSheetPath } from '../storage'
 import { getThumbnailPath } from '../thumbnails'
@@ -694,8 +695,8 @@ async function extractProductFromPage(
     let specSheetPath: string | undefined
     let resolvedSpecSheetUrl: string | undefined
 
-    // Primary spec sheet = first link in the list
-    const primaryLink = pageData.specSheetLinks?.[0] ?? null
+    // Primary spec sheet = best match for this product (not an accessory, own-product URL)
+    const primaryLink = pickBestSpecSheet(pageData.specSheetLinks ?? [], productId)
     const cachedPath = getSpecSheetPath('acuity', productId)
     if (cachedPath) {
       specSheetPath = cachedPath

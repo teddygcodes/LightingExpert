@@ -10,6 +10,7 @@ import {
   normalizeDimmingTypes,
   normalizeMountingTypes,
   normalizeFormFactor,
+  pickBestSpecSheet,
 } from './normalize'
 import { saveSpecSheet, getSpecSheetPath } from '../storage'
 import { getThumbnailPath } from '../thumbnails'
@@ -653,7 +654,7 @@ async function extractProductFromPage(
     let specSheetPath: string | undefined
     let resolvedSpecSheetUrl: string | undefined
 
-    const primaryLink = pageData.specSheetLinks?.[0] ?? null
+    const primaryLink = pickBestSpecSheet(pageData.specSheetLinks ?? [], productId)
     const cachedPath = getSpecSheetPath('acuity-cs', productId)
     if (cachedPath) {
       specSheetPath = cachedPath
@@ -680,10 +681,10 @@ async function extractProductFromPage(
     }
 
     const specSheets: Array<{ label: string; url: string; path?: string }> =
-      (pageData.specSheetLinks ?? []).map((s, i) => ({
+      (pageData.specSheetLinks ?? []).map((s) => ({
         label: s.label,
         url: s.url,
-        path: i === 0 ? specSheetPath : undefined,
+        path: s.url === primaryLink?.url ? specSheetPath : undefined,
       }))
 
     // ── Thumbnail Image ───────────────────────────────────────────────────────
