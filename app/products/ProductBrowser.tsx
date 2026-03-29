@@ -2,30 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import ProductCard from '@/components/ProductCard'
+import { SkeletonCard } from '@/components/Skeleton'
 import { getThumbnailUrl } from '@/lib/thumbnails'
+import { COLORS } from '@/lib/design-tokens'
+import Breadcrumb from './Breadcrumb'
+import EmptyState from './EmptyState'
+import ManufacturerCard, { type ManufacturerEntry } from './ManufacturerCard'
+import CategoryCard, { type Category } from './CategoryCard'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ManufacturerEntry {
-  id: string
-  name: string
-  slug: string
-  productCount: number
-  categories: { id: string; name: string; slug: string }[]
-}
-
-interface Category {
-  id: string
-  name: string
-  slug: string
-  path: string | null
-  sortOrder: number
-  parentId: string | null
-  children: Category[]
-  directProductCount: number
-  childCategoryCount: number
-  descendantProductCount: number
-}
 
 interface Product {
   id: string
@@ -40,184 +25,22 @@ interface Product {
   manufacturer?: { name: string; slug: string }
 }
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
+// ─── Skeleton grid ────────────────────────────────────────────────────────────
 
-const ACCENT = '#d13438'
-const BG = '#f3f2f1'
-const CARD_BG = '#ffffff'
-const BORDER = '#edebe9'
-const TEXT_PRIMARY = '#201f1e'
-const TEXT_SECONDARY = '#605e5c'
-const TEXT_MUTED = '#a19f9d'
-const FONT = '"Segoe UI", system-ui, -apple-system, sans-serif'
-
-// ─── Breadcrumb ───────────────────────────────────────────────────────────────
-
-function Breadcrumb({ parts }: { parts: { label: string; onClick?: () => void }[] }) {
+function SkeletonGrid({ count }: { count: number }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: TEXT_SECONDARY, marginBottom: 20, fontFamily: FONT }}>
-      {parts.map((p, i) => (
-        <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {i > 0 && <span style={{ color: TEXT_MUTED }}>›</span>}
-          {p.onClick ? (
-            <button
-              onClick={p.onClick}
-              style={{
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-                color: ACCENT,
-                fontSize: 13,
-                fontFamily: FONT,
-                textDecoration: 'none',
-              }}
-            >
-              {p.label}
-            </button>
-          ) : (
-            <span style={{ color: TEXT_PRIMARY, fontWeight: 600 }}>{p.label}</span>
-          )}
-        </span>
+    <div style={gridStyle}>
+      {Array.from({ length: count }, (_, i) => (
+        <SkeletonCard key={i} />
       ))}
     </div>
   )
 }
 
-// ─── Empty state ──────────────────────────────────────────────────────────────
-
-function EmptyState({ title, description }: { title: string; description: string }) {
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      padding: '56px 24px',
-      color: TEXT_SECONDARY,
-      fontFamily: FONT,
-    }}>
-      <svg width={40} height={40} viewBox="0 0 40 40" fill="none" style={{ marginBottom: 16, opacity: 0.35 }}>
-        <rect x={4} y={10} width={32} height={24} rx={3} stroke={TEXT_SECONDARY} strokeWidth={2} />
-        <path d="M4 17h32" stroke={TEXT_SECONDARY} strokeWidth={2} />
-        <path d="M13 10V6a7 7 0 0 1 14 0v4" stroke={TEXT_SECONDARY} strokeWidth={2} />
-      </svg>
-      <div style={{ fontWeight: 600, fontSize: 15, color: TEXT_PRIMARY, marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: 13, textAlign: 'center', maxWidth: 300 }}>{description}</div>
-    </div>
-  )
-}
-
-// ─── Manufacturer card ────────────────────────────────────────────────────────
-
-function ManufacturerCard({ mfr, onClick }: { mfr: ManufacturerEntry; onClick: () => void }) {
-  const [hovered, setHovered] = useState(false)
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background: CARD_BG,
-        border: `1px solid ${hovered ? ACCENT : BORDER}`,
-        borderLeft: `3px solid ${hovered ? ACCENT : BORDER}`,
-        borderRadius: 4,
-        padding: '18px 20px',
-        cursor: 'pointer',
-        transition: 'border-color 0.12s, box-shadow 0.12s',
-        boxShadow: hovered ? '0 2px 8px rgba(209,52,56,0.10)' : '0 1px 2px rgba(0,0,0,0.04)',
-        fontFamily: FONT,
-      }}
-    >
-      <div style={{ fontWeight: 700, fontSize: 15, color: TEXT_PRIMARY, marginBottom: 6 }}>{mfr.name}</div>
-      <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginBottom: 8 }}>
-        {mfr.productCount > 0
-          ? `${mfr.productCount} fixture${mfr.productCount !== 1 ? 's' : ''}`
-          : 'No fixtures yet'}
-      </div>
-      <div style={{ fontSize: 11, color: TEXT_MUTED }}>
-        {mfr.categories.slice(0, 4).map((c) => c.name).join(' · ')}
-        {mfr.categories.length > 4 ? ` · +${mfr.categories.length - 4} more` : ''}
-      </div>
-    </div>
-  )
-}
-
-// ─── Category card ────────────────────────────────────────────────────────────
-
-function CategoryCard({
-  cat,
-  onClick,
-  onViewAll,
-}: {
-  cat: Category
-  onClick: () => void
-  onViewAll: () => void
-}) {
-  const [hovered, setHovered] = useState(false)
-  const hasChildren = cat.childCategoryCount > 0
-
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background: CARD_BG,
-        border: `1px solid ${hovered ? ACCENT : BORDER}`,
-        borderLeft: `3px solid ${hovered ? ACCENT : BORDER}`,
-        borderRadius: 4,
-        padding: '16px 18px',
-        cursor: 'pointer',
-        transition: 'border-color 0.12s, box-shadow 0.12s',
-        boxShadow: hovered ? '0 2px 8px rgba(209,52,56,0.10)' : '0 1px 2px rgba(0,0,0,0.04)',
-        fontFamily: FONT,
-      }}
-      onClick={onClick}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <span style={{ fontWeight: 600, fontSize: 14, color: TEXT_PRIMARY }}>{cat.name}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 12 }}>
-          {/* Red pill badge */}
-          <span style={{
-            fontSize: 11,
-            background: '#fde7e9',
-            color: ACCENT,
-            padding: '2px 8px',
-            borderRadius: 10,
-            fontWeight: 600,
-          }}>
-            {hasChildren ? `${cat.childCategoryCount} sub` : cat.directProductCount}
-          </span>
-          {hasChildren && <span style={{ color: TEXT_MUTED, fontSize: 14 }}>›</span>}
-        </div>
-      </div>
-
-      {cat.descendantProductCount > 0 && (
-        <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 8 }}>
-          {cat.descendantProductCount} total fixture{cat.descendantProductCount !== 1 ? 's' : ''} in branch
-        </div>
-      )}
-
-      {/* "View all" secondary action — only shown for nodes that have descendants */}
-      {hasChildren && cat.descendantProductCount > 0 && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onViewAll() }}
-          style={{
-            marginTop: 10,
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            color: ACCENT,
-            fontSize: 11,
-            fontFamily: FONT,
-            textDecoration: 'underline',
-          }}
-        >
-          View all {cat.descendantProductCount} fixtures →
-        </button>
-      )}
-    </div>
-  )
+const gridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+  gap: 10,
 }
 
 // ─── ProductBrowser ───────────────────────────────────────────────────────────
@@ -227,8 +50,8 @@ export default function ProductBrowser() {
   const [selectedMfr, setSelectedMfr] = useState<ManufacturerEntry | null>(null)
 
   // Category drill-down stack
-  const [allCategories, setAllCategories] = useState<Category[]>([]) // root list
-  const [categoryStack, setCategoryStack] = useState<Category[]>([]) // breadcrumb trail
+  const [allCategories, setAllCategories] = useState<Category[]>([])
+  const [categoryStack, setCategoryStack] = useState<Category[]>([])
   const currentCategories: Category[] = categoryStack.length === 0
     ? allCategories
     : categoryStack[categoryStack.length - 1].children
@@ -329,10 +152,8 @@ export default function ProductBrowser() {
 
   function selectCategory(cat: Category) {
     if (cat.childCategoryCount > 0) {
-      // Drill into sub-categories
       setCategoryStack((prev) => [...prev, cat])
     } else {
-      // Leaf — push to stack so it shows in breadcrumb, then load products
       setCategoryStack((prev) => [...prev, cat])
       setLocalSearch('')
       fetchProducts(cat.id, selectedMfr!.id)
@@ -357,11 +178,9 @@ export default function ProductBrowser() {
   }
 
   function popToCategories(depth?: number) {
-    // depth = undefined → pop to root; depth = n → show children of stack[n]
     if (depth === undefined || depth < 0) {
       setCategoryStack([])
     } else {
-      // Keep items 0..depth inclusive so the category at depth is the current level
       setCategoryStack((prev) => prev.slice(0, depth + 1))
     }
     setProducts([])
@@ -380,7 +199,7 @@ export default function ProductBrowser() {
       )
     : products
 
-  // ── Breadcrumb parts for categories/products view ─────────────────────────
+  // ── Breadcrumb parts ──────────────────────────────────────────────────────
 
   const breadcrumbCategoryParts = [
     { label: 'Products', onClick: popToManufacturers },
@@ -398,10 +217,7 @@ export default function ProductBrowser() {
           { label: selectedMfr?.name ?? '', onClick: () => popToCategories() },
           ...categoryStack.map((cat, i) => ({
             label: cat.name,
-            // Last item is the leaf — not clickable
-            onClick: i < categoryStack.length - 1
-              ? () => popToCategories(i)
-              : undefined,
+            onClick: i < categoryStack.length - 1 ? () => popToCategories(i) : undefined,
           })),
         ]
       : view === 'products'
@@ -414,7 +230,7 @@ export default function ProductBrowser() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ fontFamily: FONT }}>
+    <div>
       {/* Global search */}
       <div style={{ marginBottom: 24 }}>
         <input
@@ -424,32 +240,30 @@ export default function ProductBrowser() {
           style={{
             width: '100%',
             padding: '9px 13px',
-            border: `1px solid ${BORDER}`,
-            borderRadius: 4,
+            border: `1px solid ${COLORS.border}`,
             fontSize: 13,
-            fontFamily: FONT,
             boxSizing: 'border-box',
             outline: 'none',
-            background: CARD_BG,
+            background: COLORS.surface,
           }}
         />
       </div>
 
-      {/* ── Fetch error banner ── */}
+      {/* Fetch error banner */}
       {fetchError && (
         <div style={{ padding: '8px 12px', background: '#fff3f3', border: '1px solid #e88',
-                      borderRadius: 4, fontSize: 12, color: '#c00', marginBottom: 12 }}>
+                      fontSize: 12, color: '#c00', marginBottom: 12 }}>
           {fetchError}
         </div>
       )}
 
-      {/* ── Search results ── */}
+      {/* Search results */}
       {view === 'search' && (
         <div>
           <div style={{ marginBottom: 16 }}>
             <button
               onClick={() => { setGlobalSearch(''); setView('manufacturers') }}
-              style={{ background: 'none', border: 'none', color: ACCENT, cursor: 'pointer', fontSize: 13, padding: 0, fontFamily: FONT }}
+              style={{ background: 'none', border: 'none', color: COLORS.accent, cursor: 'pointer', fontSize: 13, padding: 0 }}
             >
               ← Browse by manufacturer
             </button>
@@ -463,7 +277,7 @@ export default function ProductBrowser() {
 
           {!loadingProducts && searchResults.length > 0 && (
             <>
-              <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>
                 {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for &ldquo;{globalSearch}&rdquo;
               </div>
               <div style={gridStyle}>
@@ -480,10 +294,10 @@ export default function ProductBrowser() {
         </div>
       )}
 
-      {/* ── Manufacturer list ── */}
+      {/* Manufacturer list */}
       {view === 'manufacturers' && (
         <div>
-          <div style={{ fontSize: 13, color: TEXT_SECONDARY, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: COLORS.textSecondary, marginBottom: 16 }}>
             Select a manufacturer to browse fixtures.
           </div>
           {loadingMfrs ? (
@@ -500,7 +314,7 @@ export default function ProductBrowser() {
         </div>
       )}
 
-      {/* ── Category drill-down ── */}
+      {/* Category drill-down */}
       {view === 'categories' && selectedMfr && (
         <div>
           <Breadcrumb parts={breadcrumbCategoryParts.slice(0, -1).concat(
@@ -531,7 +345,7 @@ export default function ProductBrowser() {
         </div>
       )}
 
-      {/* ── Product grid ── */}
+      {/* Product grid */}
       {view === 'products' && selectedMfr && (
         <div>
           <Breadcrumb parts={breadcrumbProductParts} />
@@ -543,10 +357,8 @@ export default function ProductBrowser() {
               placeholder="Filter fixtures…"
               style={{
                 padding: '7px 12px',
-                border: `1px solid ${BORDER}`,
-                borderRadius: 4,
+                border: `1px solid ${COLORS.border}`,
                 fontSize: 13,
-                fontFamily: FONT,
                 width: 260,
                 outline: 'none',
               }}
@@ -564,7 +376,7 @@ export default function ProductBrowser() {
 
           {!loadingProducts && visibleProducts.length > 0 && (
             <>
-              <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 12 }}>
                 {visibleProducts.length} fixture{visibleProducts.length !== 1 ? 's' : ''}
               </div>
               <div style={gridStyle}>
@@ -582,30 +394,4 @@ export default function ProductBrowser() {
       )}
     </div>
   )
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function SkeletonGrid({ count }: { count: number }) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} style={{
-          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6,
-          padding: 14, animation: 'pulse 1.5s ease-in-out infinite',
-        }}>
-          <div style={{ height: 14, background: '#e8e8e8', borderRadius: 3, marginBottom: 10, width: '70%' }} />
-          <div style={{ height: 10, background: '#f0f0f0', borderRadius: 3, marginBottom: 6, width: '90%' }} />
-          <div style={{ height: 10, background: '#f0f0f0', borderRadius: 3, width: '50%' }} />
-        </div>
-      ))}
-      <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }`}</style>
-    </div>
-  )
-}
-
-const gridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-  gap: 10,
 }
