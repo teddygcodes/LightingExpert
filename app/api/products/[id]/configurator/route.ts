@@ -9,11 +9,12 @@ import {
   validateMatrixFieldPresence,
 } from '@/lib/configurator'
 import { extractOrderingMatrixFromSpec } from '@/lib/extract-matrix'
+import { checkRateLimit } from '@/lib/agent/rate-limit'
 
 const MATRIX_COLS = `id, "matrixType", "baseFamily", separator, "sampleNumber", columns, "suffixOptions", "skuTable"`
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
@@ -59,6 +60,13 @@ export async function GET(
 
   // Tier 3: on-demand extraction from rawSpecText when no matrix exists yet
   if (!rows.length && product.rawSpecText && product.rawSpecText.length >= 200 && product.familyName) {
+    // Rate limit AI extraction to prevent abuse
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+               req.headers.get('x-real-ip') ?? 'unknown'
+    const { allowed } = checkRateLimit(ip)
+    if (!allowed) {
+      return NextResponse.json({ hasMatrix: false, rateLimited: true })
+    }
     try {
       // Derive a cleaner family name for the AI prompt when the DB familyName is a generic phrase.
       // e.g. "EPANL Flat Panel" → "EPANL"; fall back to DB familyName if no clean code found.

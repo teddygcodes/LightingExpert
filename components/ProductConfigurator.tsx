@@ -208,6 +208,7 @@ interface Props {
 export default function ProductConfigurator({ productId, currentOverride, onCatalogBuilt, onClose, onNotFound }: Props) {
   const [matrix, setMatrix] = useState<OrderingMatrixData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [columnSelections, setColumnSelections] = useState<Record<string, string>>({})
   const [suffixSelections, setSuffixSelections] = useState<string[]>([])
   const [parseWarning, setParseWarning] = useState<string | null>(null)
@@ -276,7 +277,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
       })
       .catch(() => {
         setLoading(false)
-        onClose()
+        setError('Failed to load configurator. Please try again.')
       })
   }, [productId, currentOverride])
 
@@ -284,6 +285,15 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
     return (
       <div style={{ padding: '12px 16px', background: '#f9f9f9', border: '1px solid #e0e0e0', fontSize: 12, color: '#888' }}>
         Analyzing spec sheet… this may take up to 30 seconds
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: '12px 16px', background: '#fff3f3', border: '1px solid #e88', fontSize: 12, color: '#c00', display: 'flex', alignItems: 'center', gap: 8 }}>
+        {error}
+        <button onClick={onClose} style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>Close</button>
       </div>
     )
   }

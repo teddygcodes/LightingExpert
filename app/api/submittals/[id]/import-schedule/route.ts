@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/db'
+import { requireAuth } from '@/lib/auth'
 
 const anthropic = new Anthropic()
 
@@ -29,6 +30,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const authError = await requireAuth()
+  if (authError) return authError
+
   const { id } = await params
 
   const submittal = await prisma.submittal.findUnique({ where: { id }, select: { id: true } })
@@ -82,87 +86,113 @@ export async function POST(
     orderBy: { sortOrder: 'desc' },
     select: { sortOrder: true },
   })
-  let nextSort = (maxOrder?.sortOrder ?? -1) + 1
+  const nextSort = (maxOrder?.sortOrder ?? -1) + 1
 
+  // Parse entries upfront
+  const entries = extracted
+    .map(e => ({
+      catalog: (e.catalog ?? '').trim(),
+      fixtureType: (e.type ?? '').trim().toUpperCase(),
+      qty: Math.max(1, parseInt(String(e.qty ?? 1), 10) || 1),
+    }))
+    .filter(e => e.catalog && e.fixtureType)
+
+  // Batch-fetch all candidate products in a single query
+  const prefixes = [...new Set(
+    entries.flatMap(e => {
+      const parts: string[] = [e.catalog.split(/[-\s]/)[0].trim()]
+      // Also extract prefixes from manufacturer-stripped variants
+      if (e.catalog.includes(' ')) {
+        const words = e.catalog.split(/\s+/)
+        for (let i = 1; i < words.length; i++) {
+          const rest = words.slice(i).join(' ').replace(/^,\s*/, '').trim()
+          const p = rest.split('-')[0].trim()
+          if (p.length >= 2) parts.push(p)
+        }
+      }
+      return parts.filter(p => p.length >= 2)
+    }).map(p => p.toUpperCase())
+  )]
+
+  const candidates = await prisma.product.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        { catalogNumber: { in: entries.map(e => e.catalog), mode: 'insensitive' } },
+        ...prefixes.map(p => ({ catalogNumber: { startsWith: p, mode: 'insensitive' as const } })),
+        ...prefixes.map(p => ({ familyName: { startsWith: p, mode: 'insensitive' as const } })),
+        ...prefixes.map(p => ({ displayName: { startsWith: p, mode: 'insensitive' as const } })),
+      ],
+    },
+    select: { id: true, catalogNumber: true, familyName: true, displayName: true, overallConfidence: true },
+    orderBy: { overallConfidence: 'desc' },
+  })
+
+  // Match each entry against candidates in memory (same 4-tier logic)
   const imported: string[] = []
   const unmatched: string[] = []
+  const itemsToCreate: {
+    submittalId: string; productId: string; fixtureType: string;
+    quantity: number; catalogNumberOverride: string | null; sortOrder: number;
+  }[] = []
 
-  for (const entry of extracted) {
-    const catalog = (entry.catalog ?? '').trim()
-    const fixtureType = (entry.type ?? '').trim().toUpperCase()
-    const qty = Math.max(1, parseInt(String(entry.qty ?? 1), 10) || 1)
-    if (!catalog || !fixtureType) continue
+  for (const entry of entries) {
+    const catalog = entry.catalog
+    let match: typeof candidates[number] | undefined
 
     // 1. Exact catalog number match
-    let product = await prisma.product.findFirst({
-      where: { catalogNumber: { equals: catalog, mode: 'insensitive' }, isActive: true },
-      select: { id: true, catalogNumber: true },
-    })
+    match = candidates.find(c => c.catalogNumber.toLowerCase() === catalog.toLowerCase())
 
-    // 2. Base-prefix match (first hyphen-delimited segment, e.g. "LHQM" from "LHQM-LED-R-HO")
-    if (!product) {
-      const prefix = catalog.split('-')[0].trim()
-      if (prefix && prefix.length >= 2) {
-        product = await prisma.product.findFirst({
-          where: { catalogNumber: { startsWith: prefix, mode: 'insensitive' }, isActive: true },
-          orderBy: { overallConfidence: 'desc' },
-          select: { id: true, catalogNumber: true },
-        })
-      }
-    }
-
-    // 3. Manufacturer-prefix fallback — progressively strip leading words
-    //    Handles cases where a mfr name slipped through (e.g. "LITHONIA LHQM-LED-R-HO")
-    if (!product && catalog.includes(' ')) {
-      const words = catalog.split(/\s+/)
-      for (let i = 1; i < words.length; i++) {
-        const rest = words.slice(i).join(' ').replace(/^,\s*/, '').trim()
-        const prefix = rest.split('-')[0].trim()
-        if (!prefix || prefix.length < 2) continue
-        product = await prisma.product.findFirst({
-          where: { catalogNumber: { startsWith: prefix, mode: 'insensitive' }, isActive: true },
-          orderBy: { overallConfidence: 'desc' },
-          select: { id: true, catalogNumber: true },
-        })
-        if (product) break
-      }
-    }
-
-    // 4. familyName / displayName prefix match — for numeric-catalogNumber products (Acuity/Lithonia)
-    //    e.g. "LHQM-LED-R-HO" → prefix "LHQM" → familyName startsWith "LHQM"
-    if (!product) {
-      const prefix = catalog.split(/[-\s]/)[0].trim()
+    // 2. Base-prefix match
+    if (!match) {
+      const prefix = catalog.split('-')[0].trim().toLowerCase()
       if (prefix.length >= 2) {
-        product = await prisma.product.findFirst({
-          where: {
-            isActive: true,
-            OR: [
-              { familyName: { startsWith: prefix, mode: 'insensitive' } },
-              { displayName: { startsWith: prefix, mode: 'insensitive' } },
-            ],
-          },
-          orderBy: { overallConfidence: 'desc' },
-          select: { id: true, catalogNumber: true },
-        })
+        match = candidates.find(c => c.catalogNumber.toLowerCase().startsWith(prefix))
       }
     }
 
-    if (!product) {
+    // 3. Manufacturer-prefix fallback — strip leading words
+    if (!match && catalog.includes(' ')) {
+      const words = catalog.split(/\s+/)
+      for (let i = 1; i < words.length && !match; i++) {
+        const rest = words.slice(i).join(' ').replace(/^,\s*/, '').trim()
+        const prefix = rest.split('-')[0].trim().toLowerCase()
+        if (prefix.length >= 2) {
+          match = candidates.find(c => c.catalogNumber.toLowerCase().startsWith(prefix))
+        }
+      }
+    }
+
+    // 4. familyName / displayName prefix match
+    if (!match) {
+      const prefix = catalog.split(/[-\s]/)[0].trim().toLowerCase()
+      if (prefix.length >= 2) {
+        match = candidates.find(c =>
+          (c.familyName?.toLowerCase().startsWith(prefix)) ||
+          (c.displayName?.toLowerCase().startsWith(prefix))
+        )
+      }
+    }
+
+    if (!match) {
       unmatched.push(catalog)
       continue
     }
 
-    await prisma.submittalItem.create({
-      data: {
-        submittalId: id,
-        productId: product.id,
-        fixtureType,
-        quantity: qty,
-        catalogNumberOverride: catalog.toLowerCase() !== product.catalogNumber.toLowerCase() ? catalog : null,
-        sortOrder: nextSort++,
-      },
+    itemsToCreate.push({
+      submittalId: id,
+      productId: match.id,
+      fixtureType: entry.fixtureType,
+      quantity: entry.qty,
+      catalogNumberOverride: catalog.toLowerCase() !== match.catalogNumber.toLowerCase() ? catalog : null,
+      sortOrder: nextSort + itemsToCreate.length,
     })
-    imported.push(`${fixtureType}: ${catalog}`)
+    imported.push(`${entry.fixtureType}: ${catalog}`)
+  }
+
+  // Batch-create all matched items
+  if (itemsToCreate.length > 0) {
+    await prisma.submittalItem.createMany({ data: itemsToCreate })
   }
 
   return NextResponse.json({ imported, unmatched })
