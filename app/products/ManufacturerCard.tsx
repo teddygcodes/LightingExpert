@@ -1,8 +1,5 @@
 'use client'
 
-import { useState } from 'react'
-import { COLORS } from '@/lib/design-tokens'
-
 interface ManufacturerEntry {
   id: string
   name: string
@@ -14,29 +11,18 @@ interface ManufacturerEntry {
 export type { ManufacturerEntry }
 
 export default function ManufacturerCard({ mfr, onClick }: { mfr: ManufacturerEntry; onClick: () => void }) {
-  const [hovered, setHovered] = useState(false)
   return (
     <div
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background: COLORS.surface,
-        border: `1px solid ${hovered ? COLORS.accent : COLORS.border}`,
-        borderLeft: `3px solid ${hovered ? COLORS.accent : COLORS.border}`,
-        padding: '18px 20px',
-        cursor: 'pointer',
-        transition: 'border-color 0.12s, box-shadow 0.12s',
-        boxShadow: hovered ? '0 2px 8px rgba(209,52,56,0.10)' : '0 1px 2px rgba(0,0,0,0.04)',
-      }}
+      className="bg-[var(--surface)] border border-[var(--border)] border-l-[3px] border-l-[var(--border)] hover:border-[var(--accent)] hover:border-l-[var(--accent)] px-5 py-[18px] cursor-pointer transition-[border-color,box-shadow] duration-[120ms] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-[0_2px_8px_rgba(209,52,56,0.10)]"
     >
-      <div style={{ fontWeight: 700, fontSize: 15, color: COLORS.text, marginBottom: 6 }}>{mfr.name}</div>
-      <div style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 8 }}>
+      <div className="font-bold text-[15px] text-[var(--text)] mb-1.5">{mfr.name}</div>
+      <div className="text-xs text-[var(--text-secondary)] mb-2">
         {mfr.productCount > 0
           ? `${mfr.productCount} fixture${mfr.productCount !== 1 ? 's' : ''}`
           : 'No fixtures yet'}
       </div>
-      <div style={{ fontSize: 11, color: COLORS.textFaint }}>
+      <div className="text-[11px] text-[var(--text-faint)]">
         {mfr.categories.slice(0, 4).map((c) => c.name).join(' · ')}
         {mfr.categories.length > 4 ? ` · +${mfr.categories.length - 4} more` : ''}
       </div>

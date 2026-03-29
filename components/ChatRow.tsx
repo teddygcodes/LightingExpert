@@ -34,79 +34,52 @@ export default function ChatRow({ chat, active, projects, onAssign, onDelete }: 
 
   return (
     <div
-      style={{ position: 'relative' }}
+      className="relative"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false) }}
     >
       <Link
         href={`/chat/${chat.id}`}
-        style={{
-          display: 'block',
-          padding: '5px 28px 5px 16px',
-          fontSize: 13,
-          color: active ? 'var(--accent)' : 'var(--text-secondary)',
-          background: active ? 'var(--accent-dim)' : hovered ? 'var(--bg)' : 'transparent',
-          textDecoration: 'none',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
-          lineHeight: 1.5,
-          transition: 'background 0.1s',
-        }}
+        className={`block py-[5px] pr-7 pl-4 text-[13px] leading-normal truncate border-l-2 transition-[background] duration-100 no-underline ${
+          active
+            ? 'text-[var(--accent)] bg-[var(--accent-dim)] border-l-[var(--accent)]'
+            : 'text-[var(--text-secondary)] bg-transparent hover:bg-[var(--bg)] border-l-transparent'
+        }`}
       >
         {chat.title ?? 'New chat'}
       </Link>
 
       {(hovered || menuOpen) && (
-        <div ref={menuRef} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}>
+        <div ref={menuRef} className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10">
           <button
             onClick={(e) => { e.preventDefault(); setMenuOpen((v) => !v) }}
-            style={{
-              background: menuOpen ? 'var(--border)' : 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '2px 4px',
-              color: 'var(--text-muted)',
-              fontSize: 14,
-              lineHeight: 1,
-              display: 'flex',
-              alignItems: 'center',
-            }}
+            className={`border-none cursor-pointer px-1 py-0.5 text-[var(--text-muted)] text-sm leading-none flex items-center ${
+              menuOpen ? 'bg-[var(--border)]' : 'bg-transparent'
+            }`}
           >
             ···
           </button>
 
           {menuOpen && (
-            <div style={{
-              position: 'absolute',
-              right: 0,
-              top: '100%',
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-              minWidth: 180,
-              zIndex: 100,
-            }}>
-              <div style={{ padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ padding: '4px 12px 2px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-faint)' }}>
+            <div className="absolute right-0 top-full bg-[var(--surface)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.12)] min-w-[180px] z-[100]">
+              <div className="py-1 border-b border-b-[var(--border)]">
+                <div className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-[0.07em] text-[var(--text-faint)]">
                   Move to project
                 </div>
                 {projects.length === 0 ? (
-                  <div style={{ padding: '4px 12px 6px', fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>No projects</div>
+                  <div className="px-3 pt-1 pb-1.5 text-xs text-[var(--text-faint)] italic">No projects</div>
                 ) : (
                   projects.map((p) => (
                     <button
                       key={p.id}
                       onClick={() => { onAssign(chat.id, p.id); setMenuOpen(false) }}
-                      style={{
-                        width: '100%', textAlign: 'left', background: chat.projectId === p.id ? 'var(--accent-dim)' : 'none',
-                        border: 'none', cursor: 'pointer', padding: '5px 12px',
-                        fontSize: 12, color: chat.projectId === p.id ? 'var(--accent)' : 'var(--text-secondary)',
-                        display: 'flex', alignItems: 'center', gap: 6,
-                      }}
+                      className={`w-full text-left border-none cursor-pointer py-[5px] px-3 text-xs flex items-center gap-1.5 ${
+                        chat.projectId === p.id
+                          ? 'bg-[var(--accent-dim)] text-[var(--accent)]'
+                          : 'bg-transparent text-[var(--text-secondary)]'
+                      }`}
                     >
-                      {chat.projectId === p.id && <span style={{ color: 'var(--accent)', fontSize: 10 }}>✓</span>}
+                      {chat.projectId === p.id && <span className="text-[var(--accent)] text-[10px]">✓</span>}
                       {p.name}
                     </button>
                   ))
@@ -114,7 +87,7 @@ export default function ChatRow({ chat, active, projects, onAssign, onDelete }: 
                 {chat.projectId && (
                   <button
                     onClick={() => { onAssign(chat.id, null); setMenuOpen(false) }}
-                    style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: '5px 12px', fontSize: 12, color: 'var(--text-muted)' }}
+                    className="w-full text-left bg-transparent border-none cursor-pointer py-[5px] px-3 text-xs text-[var(--text-muted)]"
                   >
                     Remove from project
                   </button>
@@ -122,7 +95,7 @@ export default function ChatRow({ chat, active, projects, onAssign, onDelete }: 
               </div>
               <button
                 onClick={() => { onDelete(chat.id); setMenuOpen(false) }}
-                style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 12px', fontSize: 12, color: 'var(--accent)' }}
+                className="w-full text-left bg-transparent border-none cursor-pointer py-1.5 px-3 text-xs text-[var(--accent)]"
               >
                 Delete chat
               </button>

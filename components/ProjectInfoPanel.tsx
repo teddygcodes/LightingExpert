@@ -13,16 +13,6 @@ interface ProjectData {
 
 export type { ProjectData }
 
-const inputStyle = {
-  border: '1px solid #ccc',
-  padding: '6px 10px',
-  fontSize: 13,
-  width: '100%',
-  boxSizing: 'border-box' as const,
-}
-
-const labelStyle = { fontSize: 11, fontWeight: 600, color: '#6b6b6b', marginBottom: 4, display: 'block' }
-
 export default function ProjectInfoPanel({
   submittalId,
   initialData,
@@ -48,51 +38,47 @@ export default function ProjectInfoPanel({
   }
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e0e0e0', marginBottom: 20 }}>
+    <div className="bg-[var(--surface)] border border-[var(--border)] mb-5">
       <button
         onClick={() => setShowProjectInfo(v => !v)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          width: '100%', padding: '12px 16px', background: 'none', border: 'none',
-          cursor: 'pointer', fontSize: 13, fontWeight: 700, textAlign: 'left',
-        }}
+        className="flex items-center justify-between w-full px-4 py-3 bg-transparent border-none cursor-pointer text-[13px] font-bold text-left"
       >
         <span>Edit Project Info</span>
-        <span style={{ fontSize: 11, color: '#6b6b6b' }}>{showProjectInfo ? '▲ Hide' : '▼ Show'}</span>
+        <span className="text-[11px] text-[var(--text-muted)]">{showProjectInfo ? '▲ Hide' : '▼ Show'}</span>
       </button>
       {showProjectInfo && (
-        <div style={{ padding: '0 16px 16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="px-4 pb-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label style={labelStyle}>PROJECT NAME *</label>
-              <input style={inputStyle} value={data.projectName} onChange={e => setData({ ...data, projectName: e.target.value })} />
+              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">PROJECT NAME *</label>
+              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.projectName} onChange={e => setData({ ...data, projectName: e.target.value })} />
             </div>
             <div>
-              <label style={labelStyle}>PROJECT NUMBER</label>
-              <input style={inputStyle} value={data.projectNumber ?? ''} onChange={e => setData({ ...data, projectNumber: e.target.value })} />
+              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">PROJECT NUMBER</label>
+              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.projectNumber ?? ''} onChange={e => setData({ ...data, projectNumber: e.target.value })} />
             </div>
             <div>
-              <label style={labelStyle}>PREPARED BY</label>
-              <input style={inputStyle} value={data.preparedBy ?? ''} onChange={e => setData({ ...data, preparedBy: e.target.value })} />
+              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">PREPARED BY</label>
+              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.preparedBy ?? ''} onChange={e => setData({ ...data, preparedBy: e.target.value })} />
             </div>
             <div>
-              <label style={labelStyle}>PREPARED FOR</label>
-              <input style={inputStyle} value={data.preparedFor ?? ''} onChange={e => setData({ ...data, preparedFor: e.target.value })} />
+              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">PREPARED FOR</label>
+              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.preparedFor ?? ''} onChange={e => setData({ ...data, preparedFor: e.target.value })} />
             </div>
             <div>
-              <label style={labelStyle}>REVISION</label>
-              <input style={inputStyle} value={data.revision ?? ''} onChange={e => setData({ ...data, revision: e.target.value })} placeholder="Rev 0" />
+              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">REVISION</label>
+              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.revision ?? ''} onChange={e => setData({ ...data, revision: e.target.value })} placeholder="Rev 0" />
             </div>
             <div>
-              <label style={labelStyle}>NOTES</label>
-              <input style={inputStyle} value={data.notes ?? ''} onChange={e => setData({ ...data, notes: e.target.value })} />
+              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">NOTES</label>
+              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.notes ?? ''} onChange={e => setData({ ...data, notes: e.target.value })} />
             </div>
           </div>
-          <div style={{ marginTop: 14 }}>
+          <div className="mt-3.5">
             <button
               onClick={saveProjectInfo}
               disabled={saving}
-              style={{ background: '#1a1a1a', color: '#fff', border: 'none', padding: '8px 18px', fontSize: 13, cursor: 'pointer' }}
+              className="bg-[var(--text)] text-white border-none px-[18px] py-2 text-[13px] cursor-pointer"
             >
               {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save Project Info'}
             </button>

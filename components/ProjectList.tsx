@@ -41,21 +41,21 @@ export default function ProjectList({ projects, activeChatId, onAssign, onDelete
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 12px 2px' }}>
-        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-faint)' }}>
+      <div className="flex items-center justify-between px-3 pt-1 pb-0.5">
+        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-faint)]">
           Projects
         </span>
         <button
           onClick={() => setShowNewProject(true)}
           title="New project"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: '0 2px', fontSize: 16, lineHeight: 1, display: 'flex', alignItems: 'center' }}
+          className="bg-transparent border-none cursor-pointer text-[var(--text-faint)] px-0.5 text-base leading-none flex items-center"
         >
           +
         </button>
       </div>
 
       {showNewProject && (
-        <div style={{ padding: '6px 12px', display: 'flex', gap: 4 }}>
+        <div className="px-3 py-1.5 flex gap-1">
           <input
             autoFocus
             value={newProjectName}
@@ -65,16 +65,11 @@ export default function ProjectList({ projects, activeChatId, onAssign, onDelete
               if (e.key === 'Escape') { setShowNewProject(false); setNewProjectName('') }
             }}
             placeholder="Project name…"
-            style={{
-              flex: 1, fontSize: 12, padding: '4px 8px',
-              border: '1px solid var(--border)',
-              background: 'var(--bg)', color: 'var(--text)',
-              outline: 'none',
-            }}
+            className="flex-1 text-xs px-2 py-1 border border-[var(--border)] bg-[var(--bg)] text-[var(--text)] outline-none"
           />
           <button
             onClick={handleCreateProject}
-            style={{ background: 'var(--accent)', border: 'none', color: '#fff', padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}
+            className="bg-[var(--accent)] border-none text-white px-2 py-1 text-[11px] cursor-pointer"
           >
             Add
           </button>
@@ -82,7 +77,7 @@ export default function ProjectList({ projects, activeChatId, onAssign, onDelete
       )}
 
       {projects.length === 0 && !showNewProject && (
-        <div style={{ padding: '3px 12px 6px', fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>
+        <div className="px-3 pt-[3px] pb-1.5 text-xs text-[var(--text-faint)] italic">
           No projects yet
         </div>
       )}
@@ -93,38 +88,25 @@ export default function ProjectList({ projects, activeChatId, onAssign, onDelete
           <div key={project.id}>
             <button
               onClick={() => toggleProject(project.id)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '5px 12px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 13,
-                color: 'var(--text)',
-                textAlign: 'left',
-                fontWeight: 500,
-              }}
+              className="w-full flex items-center gap-1.5 py-[5px] px-3 bg-transparent border-none cursor-pointer text-[13px] text-[var(--text)] text-left font-medium"
             >
-              <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}>
+              <svg width="9" height="9" viewBox="0 0 9 9" fill="none" className={`shrink-0 transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`}>
                 <path d="M2 1.5l4.5 3L2 7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square"/>
               </svg>
-              <svg width="13" height="11" viewBox="0 0 13 11" fill="none" style={{ flexShrink: 0 }}>
+              <svg width="13" height="11" viewBox="0 0 13 11" fill="none" className="shrink-0">
                 <path d="M1 2.5h4l1.5 2H12v5H1V2.5z" fill="var(--accent-dim)" stroke="var(--accent)" strokeWidth="1"/>
               </svg>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontSize: 13 }}>
+              <span className="truncate flex-1 text-[13px]">
                 {project.name}
               </span>
-              <span style={{ fontSize: 10, color: 'var(--text-faint)', flexShrink: 0 }}>
+              <span className="text-[10px] text-[var(--text-faint)] shrink-0">
                 {project.chats.length}
               </span>
             </button>
             {isOpen && (
-              <div style={{ paddingLeft: 10 }}>
+              <div className="pl-2.5">
                 {project.chats.length === 0 ? (
-                  <div style={{ padding: '2px 12px 5px', fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic' }}>Empty</div>
+                  <div className="px-3 py-0.5 pb-[5px] text-xs text-[var(--text-faint)] italic">Empty</div>
                 ) : (
                   project.chats.map((chat) => (
                     <ChatRow

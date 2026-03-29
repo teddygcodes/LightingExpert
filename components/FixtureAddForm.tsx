@@ -19,15 +19,8 @@ interface FixtureAddFormProps {
   onAdded: () => void
 }
 
-const inputStyle = {
-  border: '1px solid #ccc',
-  padding: '6px 10px',
-  fontSize: 13,
-  width: '100%',
-  boxSizing: 'border-box' as const,
-}
-
-const labelStyle = { fontSize: 11, fontWeight: 600, color: '#6b6b6b', marginBottom: 4, display: 'block' }
+const inputCls = 'border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border'
+const labelCls = 'text-[11px] font-semibold text-[var(--text-muted)] mb-1 block'
 
 export default function FixtureAddForm({ submittalId, onAdded }: FixtureAddFormProps) {
   const [searchQuery, setSearchQuery] = useState('')
@@ -121,13 +114,13 @@ export default function FixtureAddForm({ submittalId, onAdded }: FixtureAddFormP
   }
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e0e0e0', padding: 20 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}>Add Fixture Type</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '60px 80px 1fr 1fr 1fr', gap: 10, alignItems: 'end', marginBottom: 10 }}>
+    <div className="bg-[var(--surface)] border border-[var(--border)] p-5">
+      <div className="text-[13px] font-bold mb-3.5">Add Fixture Type</div>
+      <div className="grid grid-cols-[60px_80px_1fr_1fr_1fr] gap-2.5 items-end mb-2.5">
         <div>
-          <label style={labelStyle}>TYPE *</label>
+          <label className={labelCls}>TYPE *</label>
           <input
-            style={inputStyle}
+            className={inputCls}
             value={fixtureType}
             onChange={e => setFixtureType(e.target.value)}
             placeholder="A"
@@ -135,19 +128,19 @@ export default function FixtureAddForm({ submittalId, onAdded }: FixtureAddFormP
           />
         </div>
         <div>
-          <label style={labelStyle}>QTY</label>
+          <label className={labelCls}>QTY</label>
           <input
-            style={inputStyle}
+            className={inputCls}
             type="number"
             min={1}
             value={quantity}
             onChange={e => setQuantity(Number(e.target.value))}
           />
         </div>
-        <div style={{ position: 'relative' }}>
-          <label style={labelStyle}>PRODUCT SEARCH *</label>
+        <div className="relative">
+          <label className={labelCls}>PRODUCT SEARCH *</label>
           <input
-            style={inputStyle}
+            className={inputCls}
             value={selectedProduct ? `${selectedProduct.catalogNumber} — ${selectedProduct.displayName ?? ''}` : searchQuery}
             onChange={e => {
               setSelectedProduct(null)
@@ -156,22 +149,20 @@ export default function FixtureAddForm({ submittalId, onAdded }: FixtureAddFormP
             placeholder="Search catalog #…"
           />
           {searchError && (
-            <p style={{ color: '#c00', fontSize: 12, marginTop: 4 }}>Search failed — please try again</p>
+            <p className="text-[#c00] text-xs mt-1">Search failed — please try again</p>
           )}
           {searchResults.length > 0 && !selectedProduct && (
-            <div style={{ position: 'absolute', zIndex: 20, background: '#fff', border: '1px solid #ccc', width: '100%', maxHeight: 200, overflowY: 'auto', top: '100%' }}>
+            <div className="absolute z-20 bg-[var(--surface)] border border-[var(--border-strong)] w-full max-h-[200px] overflow-y-auto top-full">
               {searchResults.map(p => (
                 <div
                   key={p.id}
                   onClick={() => { setSelectedProduct(p); setSearchResults([]) }}
-                  style={{ padding: '6px 10px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid #f0f0f0' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#f9f9f9')}
-                  onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+                  className="px-2.5 py-1.5 cursor-pointer text-xs border-b border-b-[var(--bg)] hover:bg-[var(--surface-raised)] bg-[var(--surface)]"
                 >
-                  <strong style={{ color: '#d13438' }}>{p.catalogNumber}</strong>
-                  {' '}— {p.displayName ?? ''} <span style={{ color: '#aaa' }}>({p.manufacturer?.name})</span>
+                  <strong className="text-[var(--accent)]">{p.catalogNumber}</strong>
+                  {' '}— {p.displayName ?? ''} <span className="text-[var(--text-faint)]">({p.manufacturer?.name})</span>
                   {!p.specSheetPath && (
-                    <span style={{ marginLeft: 6, color: '#f7a600', fontSize: 11 }}>No spec sheet on file</span>
+                    <span className="ml-1.5 text-[#f7a600] text-[11px]">No spec sheet on file</span>
                   )}
                 </div>
               ))}
@@ -179,24 +170,24 @@ export default function FixtureAddForm({ submittalId, onAdded }: FixtureAddFormP
           )}
         </div>
         <div>
-          <label style={labelStyle}>LOCATION TAG</label>
-          <input style={inputStyle} value={locationTag} onChange={e => setLocationTag(e.target.value)} placeholder="Office 101" />
+          <label className={labelCls}>LOCATION TAG</label>
+          <input className={inputCls} value={locationTag} onChange={e => setLocationTag(e.target.value)} placeholder="Office 101" />
         </div>
         <div>
-          <label style={labelStyle}>NOTES</label>
-          <input style={inputStyle} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+          <label className={labelCls}>NOTES</label>
+          <input className={inputCls} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
         </div>
       </div>
 
       {selectedProduct && (
-        <div style={{ marginTop: 10 }}>
+        <div className="mt-2.5">
           {catalogOverride ? (
-            <div style={{ background: '#f0f4f8', border: '1px solid #0078d4', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 600, textTransform: 'uppercase' }}>Selected:</span>
-              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1a1a1a', fontSize: 13 }}>{catalogOverride}</span>
+            <div className="bg-[#f0f4f8] border border-[#0078d4] px-3.5 py-2.5 flex items-center gap-3">
+              <span className="text-[11px] text-[var(--text-muted)] font-semibold uppercase">Selected:</span>
+              <span className="font-mono font-bold text-[var(--text)] text-[13px]">{catalogOverride}</span>
               <button
                 onClick={() => { setCatalogOverride(null); setShowConfigurator(true) }}
-                style={{ marginLeft: 'auto', background: 'none', border: '1px solid #0078d4', color: '#0078d4', padding: '2px 8px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
+                className="ml-auto bg-transparent border border-[#0078d4] text-[#0078d4] px-2 py-0.5 text-[11px] cursor-pointer font-semibold"
               >
                 Change
               </button>
@@ -213,28 +204,21 @@ export default function FixtureAddForm({ submittalId, onAdded }: FixtureAddFormP
       )}
 
       {!selectedProduct?.orderingMatrixId && selectedProduct?.configOptions && Object.keys(selectedProduct.configOptions).length > 0 && (
-        <div style={{ background: '#f9f9f9', border: '1px solid #e0e0e0', padding: '12px 14px', marginTop: 10 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
+        <div className="bg-[var(--surface-raised)] border border-[var(--border)] px-3.5 py-3 mt-2.5">
+          <div className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-[0.04em] mb-2.5">
             Configure Fixture
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 20px', marginBottom: 10 }}>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 mb-2.5">
             {Object.entries(selectedProduct.configOptions).map(([colName, opts]) => (
-              <div key={colName} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, color: '#6b6b6b', whiteSpace: 'nowrap' }}>{colName}:</span>
+              <div key={colName} className="flex items-center gap-1.5">
+                <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">{colName}:</span>
                 {opts.length === 1 ? (
-                  <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#aaa' }}>{opts[0]}</span>
+                  <span className="text-xs font-mono text-[var(--text-faint)]">{opts[0]}</span>
                 ) : (
                   <select
                     value={configSelections[colName] ?? opts[0]}
                     onChange={e => setConfigSelections(prev => ({ ...prev, [colName]: e.target.value }))}
-                    style={{
-                      border: '1px solid #ccc',
-                      padding: '3px 6px',
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                      background: '#fff',
-                      cursor: 'pointer',
-                    }}
+                    className="border border-[var(--border-strong)] px-1.5 py-[3px] text-xs font-mono bg-[var(--surface)] cursor-pointer"
                   >
                     {opts.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
@@ -242,9 +226,9 @@ export default function FixtureAddForm({ submittalId, onAdded }: FixtureAddFormP
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: '#6b6b6b' }}>
+          <div className="text-[11px] text-[var(--text-muted)]">
             Full part number:{' '}
-            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1a1a1a' }}>
+            <span className="font-mono font-bold text-[var(--text)]">
               {selectedProduct.catalogNumber}-{Object.values(configSelections).join('-')}
             </span>
           </div>
@@ -254,20 +238,16 @@ export default function FixtureAddForm({ submittalId, onAdded }: FixtureAddFormP
       <button
         onClick={addFixture}
         disabled={!selectedProduct || !fixtureType || adding}
-        style={{
-          background: selectedProduct && fixtureType ? '#d13438' : '#ccc',
-          color: '#fff',
-          border: 'none',
-          padding: '8px 18px',
-          fontSize: 13,
-          marginTop: 10,
-          cursor: selectedProduct && fixtureType ? 'pointer' : 'not-allowed',
-        }}
+        className={`border-none text-white px-[18px] py-2 text-[13px] mt-2.5 ${
+          selectedProduct && fixtureType
+            ? 'bg-[var(--accent)] cursor-pointer'
+            : 'bg-[var(--border-strong)] cursor-not-allowed'
+        }`}
       >
         {adding ? 'Adding…' : '+ Add Fixture'}
       </button>
       {addError && (
-        <p style={{ color: '#c00', fontSize: 12, marginTop: 4 }}>{addError}</p>
+        <p className="text-[#c00] text-xs mt-1">{addError}</p>
       )}
     </div>
   )

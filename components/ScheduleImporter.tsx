@@ -37,42 +37,41 @@ export default function ScheduleImporter({ submittalId, onImported }: ScheduleIm
 
   return (
     <>
-      <input ref={fileInputRef} type="file" accept="image/*,.pdf" onChange={handleImport} style={{ display: 'none' }} />
-      <div style={{ background: '#fff', border: '1px solid #e0e0e0', padding: '12px 16px', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <input ref={fileInputRef} type="file" accept="image/*,.pdf" onChange={handleImport} className="hidden" />
+      <div className="bg-[var(--surface)] border border-[var(--border)] px-4 py-3 mb-5">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={() => { setImportResult(null); fileInputRef.current?.click() }}
             disabled={importing}
-            style={{
-              background: importing ? '#ccc' : '#1a1a1a',
-              color: '#fff', border: 'none', padding: '8px 18px',
-              fontSize: 13, fontWeight: 600,
-              cursor: importing ? 'not-allowed' : 'pointer',
-            }}
+            className={`text-white border-none px-[18px] py-2 text-[13px] font-semibold ${
+              importing
+                ? 'bg-[var(--border-strong)] cursor-not-allowed'
+                : 'bg-[var(--text)] cursor-pointer'
+            }`}
           >
             {importing ? 'Reading fixture schedule…' : '↑ Import from Schedule'}
           </button>
-          <span style={{ fontSize: 12, color: '#6b6b6b' }}>Upload a screenshot or PDF of a fixture schedule to auto-populate</span>
+          <span className="text-xs text-[var(--text-muted)]">Upload a screenshot or PDF of a fixture schedule to auto-populate</span>
         </div>
         {importResult && (
-          <div style={{ marginTop: 10, fontSize: 12 }}>
+          <div className="mt-2.5 text-xs">
             {importResult.imported.length > 0 && (
-              <div style={{ color: '#107c10', fontWeight: 600 }}>
+              <div className="text-[#107c10] font-semibold">
                 ✓ Imported {importResult.imported.length} fixture{importResult.imported.length !== 1 ? 's' : ''}
               </div>
             )}
             {importResult.unmatched.length > 0 && (
-              <div style={{ color: '#ff8c00', marginTop: 4 }}>
+              <div className="text-[#ff8c00] mt-1">
                 ⚠ {importResult.unmatched.length} not found in database — add manually: {importResult.unmatched.join(', ')}
               </div>
             )}
             {importResult.imported.length === 0 && importResult.unmatched.length === 0 && (
-              <div style={{ color: '#6b6b6b' }}>No fixture entries found in the uploaded document.</div>
+              <div className="text-[var(--text-muted)]">No fixture entries found in the uploaded document.</div>
             )}
           </div>
         )}
         {importError && (
-          <p style={{ color: '#c00', fontSize: 12, marginTop: 4 }}>{importError}</p>
+          <p className="text-[#c00] text-xs mt-1">{importError}</p>
         )}
       </div>
     </>

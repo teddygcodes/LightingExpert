@@ -1,8 +1,5 @@
 'use client'
 
-import { useState } from 'react'
-import { COLORS } from '@/lib/design-tokens'
-
 export interface Category {
   id: string
   name: string
@@ -25,43 +22,25 @@ export default function CategoryCard({
   onClick: () => void
   onViewAll: () => void
 }) {
-  const [hovered, setHovered] = useState(false)
   const hasChildren = cat.childCategoryCount > 0
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background: COLORS.surface,
-        border: `1px solid ${hovered ? COLORS.accent : COLORS.border}`,
-        borderLeft: `3px solid ${hovered ? COLORS.accent : COLORS.border}`,
-        padding: '16px 18px',
-        cursor: 'pointer',
-        transition: 'border-color 0.12s, box-shadow 0.12s',
-        boxShadow: hovered ? '0 2px 8px rgba(209,52,56,0.10)' : '0 1px 2px rgba(0,0,0,0.04)',
-      }}
       onClick={onClick}
+      className="bg-[var(--surface)] border border-[var(--border)] border-l-[3px] border-l-[var(--border)] hover:border-[var(--accent)] hover:border-l-[var(--accent)] px-[18px] py-4 cursor-pointer transition-[border-color,box-shadow] duration-[120ms] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-[0_2px_8px_rgba(209,52,56,0.10)]"
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <span style={{ fontWeight: 600, fontSize: 14, color: COLORS.text }}>{cat.name}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 12 }}>
-          <span style={{
-            fontSize: 11,
-            background: '#fde7e9',
-            color: COLORS.accent,
-            padding: '2px 8px',
-            borderRadius: 10,
-            fontWeight: 600,
-          }}>
+      <div className="flex justify-between items-start">
+        <span className="font-semibold text-sm text-[var(--text)]">{cat.name}</span>
+        <div className="flex items-center gap-2 shrink-0 ml-3">
+          <span className="text-[11px] bg-[#fde7e9] text-[var(--accent)] px-2 py-0.5 font-semibold">
             {hasChildren ? `${cat.childCategoryCount} sub` : cat.directProductCount}
           </span>
-          {hasChildren && <span style={{ color: COLORS.textFaint, fontSize: 14 }}>›</span>}
+          {hasChildren && <span className="text-[var(--text-faint)] text-sm">›</span>}
         </div>
       </div>
 
       {cat.descendantProductCount > 0 && (
-        <div style={{ fontSize: 11, color: COLORS.textFaint, marginTop: 8 }}>
+        <div className="text-[11px] text-[var(--text-faint)] mt-2">
           {cat.descendantProductCount} total fixture{cat.descendantProductCount !== 1 ? 's' : ''} in branch
         </div>
       )}
@@ -69,16 +48,7 @@ export default function CategoryCard({
       {hasChildren && cat.descendantProductCount > 0 && (
         <button
           onClick={(e) => { e.stopPropagation(); onViewAll() }}
-          style={{
-            marginTop: 10,
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            color: COLORS.accent,
-            fontSize: 11,
-            textDecoration: 'underline',
-          }}
+          className="mt-2.5 bg-transparent border-none p-0 cursor-pointer text-[var(--accent)] text-[11px] underline"
         >
           View all {cat.descendantProductCount} fixtures →
         </button>

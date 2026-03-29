@@ -1,35 +1,20 @@
 'use client'
 
-import { COLORS } from '@/lib/design-tokens'
-
-interface BreadcrumbPart {
-  label: string
-  onClick?: () => void
-}
-
-export default function Breadcrumb({ parts }: { parts: BreadcrumbPart[] }) {
+export default function Breadcrumb({ parts }: { parts: { label: string; onClick?: () => void }[] }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: COLORS.textSecondary, marginBottom: 20 }}>
+    <div className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] mb-5">
       {parts.map((p, i) => (
-        <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {i > 0 && <span style={{ color: COLORS.textFaint }}>›</span>}
+        <span key={i} className="flex items-center gap-1.5">
+          {i > 0 && <span className="text-[var(--text-faint)]">›</span>}
           {p.onClick ? (
             <button
               onClick={p.onClick}
-              style={{
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-                color: COLORS.accent,
-                fontSize: 13,
-                textDecoration: 'none',
-              }}
+              className="bg-transparent border-none p-0 cursor-pointer text-[var(--accent)] text-[13px] no-underline"
             >
               {p.label}
             </button>
           ) : (
-            <span style={{ color: COLORS.text, fontWeight: 600 }}>{p.label}</span>
+            <span className="text-[var(--text)] font-semibold">{p.label}</span>
           )}
         </span>
       ))}
