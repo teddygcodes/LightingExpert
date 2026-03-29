@@ -77,7 +77,9 @@ async function nextFixtureType(submittalId: string): Promise<string> {
 
 const searchProductsSchema = z.object({
   query: z.string().optional().describe(
-    "Product family name or catalog number prefix ONLY. Do NOT put fixture types (use fixtureType), manufacturer names (use manufacturer), wattage (use maxWattage), or 'contractor select' (use categorySlug: 'contractor-select') here. Examples: 'CPX', 'CPHB', 'ORHB'. Omit entirely if structured filters are sufficient."
+    "Product family name, catalog number prefix, or sub-type keyword. Do NOT put manufacturer names (use manufacturer), wattage (use maxWattage), or 'contractor select' (use categorySlug) here. " +
+    "Sub-type exceptions: within EXIT_EMERGENCY, use query to distinguish — 'exit sign' for exit signs, 'emergency driver' for inline LED drivers, 'emergency unit' for remote emergency heads. " +
+    "Examples: 'CPX', 'CPHB', 'ORHB', 'exit sign', 'emergency driver'. Omit entirely if structured filters are sufficient."
   ),
   manufacturer: z.enum(['acuity', 'cooper', 'elite', 'current', 'lutron']).optional()
     .describe('Filter to a specific manufacturer slug.'),

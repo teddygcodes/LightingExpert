@@ -289,6 +289,12 @@ Common mappings:
 - j-box light → SURFACE_MOUNT
 - exit combo / bug eye → EXIT_EMERGENCY
 
+EXIT_EMERGENCY sub-type disambiguation (all share the same fixtureType — use query to narrow):
+- "exit sign" or "exit" → fixtureType: EXIT_EMERGENCY + query: 'exit sign'
+- "emergency driver" or "ILB" → fixtureType: EXIT_EMERGENCY + query: 'emergency driver'
+- "emergency unit" or "bug eye" → fixtureType: EXIT_EMERGENCY + query: 'emergency unit'
+- "exit combo" → fixtureType: EXIT_EMERGENCY + query: 'exit combo'
+
 Form factor / shape:
 If the user says 2x4, 2x2, or 1x4, include that in the query param.
 If the user says round, circular, or UFO (high bay), pass query="round".
