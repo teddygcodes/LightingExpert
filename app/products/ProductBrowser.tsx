@@ -235,6 +235,7 @@ export default function ProductBrowser() {
 
   // Product display
   const [products, setProducts] = useState<Product[]>([])
+  const [loadingMfrs, setLoadingMfrs] = useState(true)
   const [loadingCats, setLoadingCats] = useState(false)
   const [loadingProducts, setLoadingProducts] = useState(false)
 
@@ -252,8 +253,8 @@ export default function ProductBrowser() {
   useEffect(() => {
     fetch('/api/manufacturers')
       .then((r) => r.json())
-      .then((data) => { setManufacturers(data); setFetchError(null) })
-      .catch(() => { setManufacturers([]); setFetchError('Failed to load manufacturers') })
+      .then((data) => { setManufacturers(data); setFetchError(null); setLoadingMfrs(false) })
+      .catch(() => { setManufacturers([]); setFetchError('Failed to load manufacturers'); setLoadingMfrs(false) })
   }, [])
 
   const fetchCategories = useCallback(async (manufacturerId: string) => {
@@ -454,7 +455,7 @@ export default function ProductBrowser() {
             </button>
           </div>
 
-          {loadingProducts && <LoadingSpinner />}
+          {loadingProducts && <SkeletonGrid count={12} />}
 
           {!loadingProducts && searchResults.length === 0 && (
             <EmptyState title="No results" description={`No products matching "${globalSearch}"`} />
@@ -485,7 +486,9 @@ export default function ProductBrowser() {
           <div style={{ fontSize: 13, color: TEXT_SECONDARY, marginBottom: 16 }}>
             Select a manufacturer to browse fixtures.
           </div>
-          {manufacturers.length === 0 ? (
+          {loadingMfrs ? (
+            <SkeletonGrid count={6} />
+          ) : manufacturers.length === 0 ? (
             <EmptyState title="No manufacturers" description="Run a crawl to import fixtures." />
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
@@ -504,7 +507,7 @@ export default function ProductBrowser() {
             breadcrumbCategoryParts.slice(-1).map(p => ({ ...p, onClick: undefined }))
           )} />
 
-          {loadingCats && <LoadingSpinner />}
+          {loadingCats && <SkeletonGrid count={8} />}
 
           {!loadingCats && currentCategories.length === 0 && (
             <EmptyState
@@ -550,7 +553,7 @@ export default function ProductBrowser() {
             />
           </div>
 
-          {loadingProducts && <LoadingSpinner />}
+          {loadingProducts && <SkeletonGrid count={12} />}
 
           {!loadingProducts && visibleProducts.length === 0 && (
             <EmptyState
@@ -583,10 +586,20 @@ export default function ProductBrowser() {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function LoadingSpinner() {
+function SkeletonGrid({ count }: { count: number }) {
   return (
-    <div style={{ color: TEXT_SECONDARY, fontSize: 13, padding: '32px 0', textAlign: 'center', fontFamily: FONT }}>
-      Loading…
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} style={{
+          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6,
+          padding: 14, animation: 'pulse 1.5s ease-in-out infinite',
+        }}>
+          <div style={{ height: 14, background: '#e8e8e8', borderRadius: 3, marginBottom: 10, width: '70%' }} />
+          <div style={{ height: 10, background: '#f0f0f0', borderRadius: 3, marginBottom: 6, width: '90%' }} />
+          <div style={{ height: 10, background: '#f0f0f0', borderRadius: 3, width: '50%' }} />
+        </div>
+      ))}
+      <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }`}</style>
     </div>
   )
 }

@@ -55,7 +55,7 @@ export default function ProductCard({ product, thumbnailUrl }: ProductCardProps)
         {thumbnailUrl && !imgFailed ? (
           <img
             src={thumbnailUrl}
-            alt=""
+            alt={product.displayName || product.catalogNumber}
             onError={() => setImgFailed(true)}
             style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }}
           />
