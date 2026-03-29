@@ -94,6 +94,7 @@ export interface RecommendationContext extends AppDefaults {
   minLumens?: number
   maxWattage?: number
   preferredCct?: number
+  voltage?: string
   inferredDefaultsDescription: string[]
 }
 
@@ -105,6 +106,7 @@ export interface RecommendParams {
   maxWattage?: number
   preferredCct?: number
   minCri?: number
+  voltage?: string
 }
 
 export function buildRecommendationContext(params: RecommendParams): RecommendationContext {
@@ -127,6 +129,7 @@ export function buildRecommendationContext(params: RecommendParams): Recommendat
     `minCri: ${minCri}`,
     defaults.dlcPreferred ? 'DLC preferred' : 'DLC not required',
     defaults.dimmingPreferred ? 'dimming preferred' : 'dimming not required',
+    ...(params.voltage ? [`voltage: ${params.voltage}`] : []),
   ]
 
   return {
@@ -139,6 +142,7 @@ export function buildRecommendationContext(params: RecommendParams): Recommendat
     minLumens: params.minLumens,
     maxWattage: params.maxWattage,
     preferredCct: params.preferredCct,
+    voltage: params.voltage,
     inferredDefaultsDescription,
   }
 }
@@ -174,8 +178,8 @@ export function scoreCandidate(product: SearchProductRow, ctx: RecommendationCon
   const tier = resolveProductTier(product.manufacturer.slug, product.familyName)
   const tierScore = TIER_WEIGHTS[ctx.projectPosture][tier]
   score += tierScore
-  if (tierScore >= 18) positives.push(`${tier} tier fixture`)
-  else if (tierScore <= 8) negatives.push(`${tier} posture may not match ${ctx.projectPosture.replace(/_/g, ' ')} context`)
+  // Don't add tier to positives — tierLabel already communicates it in whyRecommended prefix
+  if (tierScore <= 8) negatives.push(`${tier}-tier may not match ${ctx.projectPosture.replace(/_/g, ' ')} project`)
 
   // ── DLC ──────────────────────────────────────────────────────────────────
   if (ctx.dlcPreferred) {
@@ -242,9 +246,9 @@ export function scoreCandidate(product: SearchProductRow, ctx: RecommendationCon
 
   // ── Build rationale strings ──────────────────────────────────────────────
   const tierLabel = { contractor: 'Contractor-grade', commercial: 'Commercial', premium: 'Premium', specialty: 'Specialty' }[tier]
-  const posLabel = ctx.projectPosture.replace(/_/g, ' ')
+  const appLabel = ctx.applicationType.replace(/_/g, ' ')
   const primaryPositives = positives.slice(0, 3).join(', ')
-  const whyBase = `${tierLabel} fixture${primaryPositives ? `, ${primaryPositives}` : ''} — ${fitConfidence >= 0.6 ? 'strong' : 'closest available'} fit for ${posLabel}`
+  const whyBase = `${tierLabel}-tier${primaryPositives ? `, ${primaryPositives}` : ''} — ${fitConfidence >= 0.6 ? 'strong' : 'closest available'} fit for ${appLabel}`
   const whyRecommended = whyBase
   const tradeoffs = negatives.length > 0 ? negatives.join('; ') : undefined
 

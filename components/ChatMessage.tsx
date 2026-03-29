@@ -1,10 +1,15 @@
 'use client'
 
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
+import dynamic from 'next/dynamic'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Message, ToolInvocation } from 'ai'
 import ProductInlineCard from './ProductInlineCard'
 import SpecSheetPreview from './SpecSheetPreview'
+
+const AddToSubmittalDialog = dynamic(() => import('./AddToSubmittalDialog'), { ssr: false })
 import type {
   SearchProductsToolResult,
   CrossReferenceToolResult,
@@ -21,6 +26,347 @@ interface Props {
   isStreaming?: boolean
   suppressSpecSheet?: boolean
 }
+
+const PdfAnnotator = dynamic(() => import('./PdfAnnotator'), { ssr: false })
+
+// ─── CrossReferenceResult — cross-ref cards with per-match Spec Sheet button ──
+
+function CrossReferenceResult({
+  result,
+  onAddToSubmittal,
+}: {
+  result: CrossReferenceToolResult
+  onAddToSubmittal?: (catalogNumber: string) => void
+}) {
+  const [activeSpec, setActiveSpec] = useState<{ pdfUrl: string; catalog: string } | null>(null)
+
+  // Support old shape (matches) and new shape (exactMatches) for session cache compat
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const exactMatches = result.exactMatches ?? (result as any).matches ?? []
+
+  const sourceLine = (
+    <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 8, display: 'flex', gap: 6, alignItems: 'baseline' }}>
+      <span style={{ fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 10 }}>
+        Source fixture
+      </span>
+      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>
+        {result.source.catalogNumber}
+      </span>
+      <span style={{ color: 'var(--text-faint)' }}>
+        {result.source.manufacturer}
+        {result.source.lumens ? ` · ${result.source.lumens.toLocaleString()} lm` : ''}
+        {result.source.wattage ? ` · ${result.source.wattage}W` : ''}
+      </span>
+    </div>
+  )
+
+  let content: React.ReactNode
+
+  if (exactMatches.length > 0) {
+    content = (
+      <div style={{ marginTop: 6 }}>
+        {sourceLine}
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+          Exact cross-reference matches
+        </div>
+        {exactMatches.map((m: CrossReferenceToolResult['exactMatches'][number], i: number) => {
+          const pct = Math.round(m.confidence * 100)
+          const accentColor = pct >= 80 ? '#15803d' : pct >= 60 ? '#b45309' : '#b91c1c'
+          return (
+            <div
+              key={i}
+              style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderTop: i === 0 ? `2px solid ${accentColor}` : '1px solid var(--border)',
+                marginBottom: 4,
+                padding: '10px 14px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.02em' }}>
+                      {m.catalogNumber}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>
+                      {m.manufacturerSlug}
+                    </span>
+                    {m.specSheetPath && (
+                      <button
+                        onClick={() => setActiveSpec({ pdfUrl: m.specSheetPath!, catalog: m.catalogNumber })}
+                        style={{
+                          fontSize: 11,
+                          padding: '2px 8px',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          cursor: 'pointer',
+                          color: 'var(--text-secondary)',
+                          fontWeight: 500,
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        Spec Sheet
+                      </button>
+                    )}
+                  </div>
+                  {m.displayName && (
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{m.displayName}</div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <ConfidenceBadge pct={pct} />
+                  <span style={{ fontSize: 10, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {m.matchType.replace(/_/g, ' ')}
+                  </span>
+                </div>
+              </div>
+              {m.importantDifferences.length > 0 && m.importantDifferences[0] !== 'No significant differences identified' && (
+                <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {m.importantDifferences.map((d, j) => (
+                    <span key={j} style={{
+                      fontSize: 11, color: 'var(--text-secondary)',
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      padding: '2px 8px',
+                    }}>
+                      {d}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
+          {result.rejectCount} hard-rejected (incompatible specs)
+        </div>
+      </div>
+    )
+  } else if (result.fallbackUsed && result.fallbackAlternatives?.length > 0) {
+    content = (
+      <div style={{ marginTop: 6 }}>
+        {sourceLine}
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+          Closest alternatives (no exact cross-reference)
+        </div>
+        {result.fallbackAlternatives.map((p) => (
+          <ProductInlineCard key={p.id} product={p} onAddToSubmittal={onAddToSubmittal} />
+        ))}
+        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
+          {result.filterDescription}
+        </div>
+      </div>
+    )
+  } else {
+    content = (
+      <div style={{ marginTop: 6 }}>
+        {sourceLine}
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic' }}>
+          {result.filterLevel === 'untyped'
+            ? 'Fixture not classified — cross-reference unavailable.'
+            : 'No cross-reference matches found.'}
+        </div>
+      </div>
+    )
+  }
+
+  const modal = activeSpec
+    ? createPortal(
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', flexDirection: 'column' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setActiveSpec(null) }}
+        >
+          <div style={{ position: 'relative', flex: 1, margin: '32px', background: '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
+                {activeSpec.catalog}
+              </span>
+              <button
+                onClick={() => setActiveSpec(null)}
+                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1, padding: '0 4px' }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              <PdfAnnotator pdfUrl={activeSpec.pdfUrl} />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
+    : null
+
+  return (
+    <>
+      {content}
+      {modal}
+    </>
+  )
+}
+
+// ─── Disambiguation list with inline spec-sheet modal ─────────────────────────
+
+function DisambigList({
+  products,
+  onSelectProduct,
+  onAddToSubmittal,
+}: {
+  products: SearchProductsToolResult['products']
+  onSelectProduct?: (catalogNumber: string) => void
+  onAddToSubmittal?: (catalogNumber: string) => void
+}) {
+  const [activeSpec, setActiveSpec] = useState<{ pdfUrl: string; catalog: string } | null>(null)
+  const [dialogProduct, setDialogProduct] = useState<SearchProductsToolResult['products'][number] | null>(null)
+  const [addedMsg, setAddedMsg] = useState<string | null>(null)
+
+  const modal = activeSpec
+    ? createPortal(
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', flexDirection: 'column' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setActiveSpec(null) }}
+        >
+          <div style={{ position: 'relative', flex: 1, margin: '32px', background: '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
+                {activeSpec.catalog}
+              </span>
+              <button
+                onClick={() => setActiveSpec(null)}
+                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1, padding: '0 4px' }}
+              >×</button>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              <PdfAnnotator pdfUrl={activeSpec.pdfUrl} />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
+    : null
+
+  return (
+    <>
+      <div style={{ marginTop: 6, border: '1px solid var(--border)' }}>
+        {products.map((p, i) => (
+          <div
+            key={p.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '10px 14px',
+              borderBottom: i < products.length - 1 ? '1px solid var(--border)' : 'none',
+              background: 'var(--surface)',
+            }}
+          >
+            {/* Catalog + specs — clickable area */}
+            <div
+              onClick={() => onSelectProduct?.(p.catalogNumber)}
+              style={{ flex: 1, minWidth: 0, cursor: onSelectProduct ? 'pointer' : 'default' }}
+              onMouseEnter={(e) => { if (onSelectProduct) (e.currentTarget as HTMLDivElement).style.opacity = '0.75' }}
+              onMouseLeave={(e) => { if (onSelectProduct) (e.currentTarget as HTMLDivElement).style.opacity = '1' }}
+            >
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
+                {p.catalogNumber}
+              </span>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {p.displayName ?? p.familyName ?? ''}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', marginTop: 3 }}>
+                {(p.lumensMin != null && p.lumensMax != null)
+                  ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.lumensMin.toLocaleString()}–{p.lumensMax.toLocaleString()} lm</span>
+                  : p.lumens != null
+                  ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.lumens.toLocaleString()} lm</span>
+                  : null}
+                {(p.wattageMin != null && p.wattageMax != null)
+                  ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.wattageMin}–{p.wattageMax}W</span>
+                  : p.wattage != null
+                  ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.wattage}W</span>
+                  : null}
+                {p.cri != null && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>CRI {p.cri}</span>}
+                {p.cctOptions?.length > 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.cctOptions.map(c => `${c}K`).join('/')}</span>
+                )}
+                {p.voltage && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.voltage.replace(/^V/, '').replace(/_/g, '/')}V</span>}
+              </div>
+            </div>
+
+            {/* Right-side: badges + actions */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {p.dlcPremium && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#15803d', background: '#f0fdf4', padding: '2px 6px', border: '1px solid #bbf7d0' }}>DLC PREMIUM</span>
+                )}
+                {p.dlcListed && !p.dlcPremium && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#15803d', background: '#f0fdf4', padding: '2px 6px', border: '1px solid #bbf7d0' }}>DLC</span>
+                )}
+                {p.wetLocation && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#3730a3', background: '#eef2ff', padding: '2px 6px', border: '1px solid #c7d2fe' }}>WET LOC</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 5 }}>
+                {p.specSheetPath && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setActiveSpec({ pdfUrl: p.specSheetPath!, catalog: p.catalogNumber }) }}
+                    style={{
+                      fontSize: 11, padding: '3px 9px',
+                      background: 'var(--surface)', border: '1px solid var(--border)',
+                      cursor: 'pointer', color: 'var(--text-secondary)', fontWeight: 500,
+                    }}
+                  >
+                    Spec Sheet
+                  </button>
+                )}
+                {onAddToSubmittal && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDialogProduct(p) }}
+                    style={{
+                      fontSize: 11, padding: '3px 9px',
+                      background: 'var(--accent)', border: 'none',
+                      cursor: 'pointer', color: '#fff', fontWeight: 500,
+                    }}
+                  >
+                    + Submittal
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {modal}
+      {addedMsg && (
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          margin: '6px 0 0', fontSize: 12,
+          color: '#15803d', background: '#f0fdf4',
+          border: '1px solid #bbf7d0', borderLeft: '3px solid #15803d',
+          padding: '5px 12px',
+        }}>
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <path d="M1.5 5.5l2.5 2.5L9.5 2" stroke="#15803d" strokeWidth="1.8" strokeLinecap="square"/>
+          </svg>
+          {addedMsg}
+        </div>
+      )}
+      {dialogProduct && (
+        <AddToSubmittalDialog
+          product={dialogProduct}
+          onClose={() => setDialogProduct(null)}
+          onAdded={(name) => {
+            setDialogProduct(null)
+            setAddedMsg(`Added to ${name}`)
+            setTimeout(() => setAddedMsg(null), 4000)
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+// ─── Tool loading indicator ────────────────────────────────────────────────────
 
 function ToolLoadingIndicator({ toolName }: { toolName: string }) {
   const labels: Record<string, string> = {
@@ -127,6 +473,22 @@ function ToolResultRenderer({
   }
 
   if (toolName === 'search_products') {
+    // Suppress search cards when they were just an intermediate lookup before
+    // cross-referencing or recommending — the final result is the relevant output.
+    const hasSuccessfulCrossRef = allInvocations.some(
+      (other) =>
+        other.toolName === 'cross_reference' &&
+        other.state === 'result' &&
+        !((other as ToolInvocation & { state: 'result'; result: unknown }).result as Record<string, unknown>)?.error
+    )
+    const hasRecommendResult = allInvocations.some(
+      (other) =>
+        other.toolName === 'recommend_fixtures' &&
+        other.state === 'result' &&
+        ((other as ToolInvocation & { state: 'result'; result: unknown }).result as RecommendFixturesToolResult)?.recommendations?.length > 0
+    )
+    if (hasSuccessfulCrossRef || hasRecommendResult) return null
+
     const r = result as SearchProductsToolResult
     if (!r.products?.length) {
       // Suppress ghost empty-result card if another search in this message succeeded
@@ -157,40 +519,11 @@ function ToolResultRenderer({
 
     if (isThisDisambig) {
       return (
-        <div style={{ marginTop: 6, border: '1px solid var(--border)' }}>
-          {r.products.map((p, i) => (
-            <div
-              key={p.id}
-              onClick={() => onSelectProduct?.(p.catalogNumber)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '10px 14px',
-                borderBottom: i < r.products.length - 1 ? '1px solid var(--border)' : 'none',
-                background: 'var(--surface)',
-                cursor: onSelectProduct ? 'pointer' : 'default',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={(e) => { if (onSelectProduct) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg)' }}
-              onMouseLeave={(e) => { if (onSelectProduct) (e.currentTarget as HTMLDivElement).style.background = 'var(--surface)' }}
-            >
-              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, minWidth: 160, color: 'var(--text)' }}>
-                {p.catalogNumber}
-              </span>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {p.displayName ?? p.familyName ?? ''}
-                {p.voltage ? ` · ${p.voltage.replace('V_', '').replace('_', '/')}V` : ''}
-                {p.lumens ? ` · ${p.lumens.toLocaleString()} lm` : ''}
-              </span>
-              {p.dlcPremium && (
-                <span style={{ fontSize: 10, fontWeight: 600, color: '#15803d', background: '#f0fdf4', padding: '2px 6px', border: '1px solid #bbf7d0', flexShrink: 0 }}>
-                  DLC PREMIUM
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
+        <DisambigList
+          products={r.products}
+          onSelectProduct={onSelectProduct}
+          onAddToSubmittal={onAddToSubmittal}
+        />
       )
     }
 
@@ -207,122 +540,11 @@ function ToolResultRenderer({
   }
 
   if (toolName === 'cross_reference') {
-    const r = result as CrossReferenceToolResult
-    // Support old shape (matches) and new shape (exactMatches) for session cache compat
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const exactMatches = r.exactMatches ?? (r as any).matches ?? []
-
-    const sourceLine = (
-      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 8, display: 'flex', gap: 6, alignItems: 'baseline' }}>
-        <span style={{ fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 10 }}>
-          Source fixture
-        </span>
-        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>
-          {r.source.catalogNumber}
-        </span>
-        <span style={{ color: 'var(--text-faint)' }}>
-          {r.source.manufacturer}
-          {r.source.lumens ? ` · ${r.source.lumens.toLocaleString()} lm` : ''}
-          {r.source.wattage ? ` · ${r.source.wattage}W` : ''}
-        </span>
-      </div>
-    )
-
-    // State 1: exact cross-reference matches
-    if (exactMatches.length > 0) {
-      return (
-        <div style={{ marginTop: 6 }}>
-          {sourceLine}
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
-            Exact cross-reference matches
-          </div>
-          {exactMatches.map((m, i) => {
-            const pct = Math.round(m.confidence * 100)
-            const accentColor = pct >= 80 ? '#15803d' : pct >= 60 ? '#b45309' : '#b91c1c'
-            return (
-              <div
-                key={i}
-                style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderTop: i === 0 ? `2px solid ${accentColor}` : '1px solid var(--border)',
-                  marginBottom: 4,
-                  padding: '10px 14px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.02em' }}>
-                        {m.catalogNumber}
-                      </span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>
-                        {m.manufacturerSlug}
-                      </span>
-                    </div>
-                    {m.displayName && (
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{m.displayName}</div>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    <ConfidenceBadge pct={pct} />
-                    <span style={{ fontSize: 10, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      {m.matchType.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                </div>
-                {m.importantDifferences.length > 0 && m.importantDifferences[0] !== 'No significant differences identified' && (
-                  <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                    {m.importantDifferences.map((d, j) => (
-                      <span key={j} style={{
-                        fontSize: 11, color: 'var(--text-secondary)',
-                        background: 'var(--bg)',
-                        border: '1px solid var(--border)',
-                        padding: '2px 8px',
-                      }}>
-                        {d}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
-            {r.rejectCount} hard-rejected (incompatible specs)
-          </div>
-        </div>
-      )
-    }
-
-    // State 2: fallback alternatives (no exact cross-ref, but auto-searched target mfr)
-    if (r.fallbackUsed && r.fallbackAlternatives?.length > 0) {
-      return (
-        <div style={{ marginTop: 6 }}>
-          {sourceLine}
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
-            Closest alternatives (no exact cross-reference)
-          </div>
-          {r.fallbackAlternatives.map((p) => (
-            <ProductInlineCard key={p.id} product={p} onAddToSubmittal={onAddToSubmittal} />
-          ))}
-          <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
-            {r.filterDescription}
-          </div>
-        </div>
-      )
-    }
-
-    // State 3: nothing available
     return (
-      <div style={{ marginTop: 6 }}>
-        {sourceLine}
-        <div style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic' }}>
-          {r.filterLevel === 'untyped'
-            ? 'Fixture not classified — cross-reference unavailable.'
-            : 'No cross-reference matches found.'}
-        </div>
-      </div>
+      <CrossReferenceResult
+        result={result as CrossReferenceToolResult}
+        onAddToSubmittal={onAddToSubmittal}
+      />
     )
   }
 

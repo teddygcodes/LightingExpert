@@ -45,21 +45,12 @@ function runHardRejects(source: ProductWithManufacturer, target: ProductWithManu
     }
   }
 
-  // 3. Wet location required
-  if (source.wetLocation === true && target.wetLocation !== true) {
-    return {
-      reason: 'wet_location_required',
-      detail: 'Source is rated for wet locations; target is not',
-    }
-  }
+  // 3. (Wet location is now a soft score penalty, not a hard reject — many fixtures have wet
+  //    rating as a bonus feature, and a dry-location substitute is still valid in most cases.)
 
-  // 4. NEMA downgrade
-  if (source.nemaRating && !target.nemaRating) {
-    return {
-      reason: 'nema_downgrade',
-      detail: `Source has NEMA rating (${source.nemaRating}); target has none`,
-    }
-  }
+  // 4. (NEMA downgrade is now a soft score penalty, not a hard reject — NEMA ratings are
+  //    often a product feature rather than a job requirement, and a non-NEMA substitute
+  //    is valid in most indoor or sheltered locations.)
 
   // 5. Voltage incompatible
   if (!voltagesCompatible(source.voltage, target.voltage)) {
@@ -305,6 +296,19 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
     score += 0.05
   }
 
+  // Wet location downgrade (soft penalty — not a hard reject)
+  if ((source as unknown as Record<string, unknown>).wetLocation === true &&
+      (target as unknown as Record<string, unknown>).wetLocation !== true) {
+    score -= 0.05
+    reasons.push('Source is wet-rated; target is not — verify installation environment')
+  }
+
+  // NEMA rating downgrade (soft penalty — not a hard reject)
+  if (source.nemaRating && !target.nemaRating) {
+    score -= 0.04
+    reasons.push(`Source has NEMA ${source.nemaRating} rating; target unrated — confirm environment requirements`)
+  }
+
   return { score: Math.min(1, Math.round(score * 100) / 100), reasons }
 }
 
@@ -346,8 +350,13 @@ function buildComparisonSnapshot(source: Product, target: Product): ComparisonSn
     ? `${target.lumensMin.toLocaleString()}–${target.lumensMax.toLocaleString()} lm`
     : target.lumens != null ? `${target.lumens.toLocaleString()} lm` : null
   if (sLumStr && tLumStr) {
-    const sLum = source.lumens ?? source.lumensMax ?? 0
-    const tLum = target.lumens ?? target.lumensMax ?? 0
+    // Use range midpoint for pct calculation — nominal lumens field can have bad extracted values
+    const sLum = (source.lumensMin != null && source.lumensMax != null)
+      ? (source.lumensMin + source.lumensMax) / 2
+      : source.lumens ?? source.lumensMax ?? source.lumensMin ?? 0
+    const tLum = (target.lumensMin != null && target.lumensMax != null)
+      ? (target.lumensMin + target.lumensMax) / 2
+      : target.lumens ?? target.lumensMax ?? target.lumensMin ?? 0
     if (sLum && tLum) {
       const pct = Math.round(((tLum - sLum) / sLum) * 100)
       deltas.lumens = `${tLumStr} vs ${sLumStr} (${pct >= 0 ? '+' : ''}${pct}%)`
@@ -364,8 +373,13 @@ function buildComparisonSnapshot(source: Product, target: Product): ComparisonSn
     ? `${target.wattageMin}–${target.wattageMax}W`
     : target.wattage != null ? `${target.wattage}W` : null
   if (sWattStr && tWattStr) {
-    const sWatt = source.wattage ?? source.wattageMax ?? 0
-    const tWatt = target.wattage ?? target.wattageMax ?? 0
+    // Use range midpoint for pct calculation
+    const sWatt = (source.wattageMin != null && source.wattageMax != null)
+      ? (source.wattageMin + source.wattageMax) / 2
+      : source.wattage ?? source.wattageMax ?? source.wattageMin ?? 0
+    const tWatt = (target.wattageMin != null && target.wattageMax != null)
+      ? (target.wattageMin + target.wattageMax) / 2
+      : target.wattage ?? target.wattageMax ?? target.wattageMin ?? 0
     if (sWatt && tWatt) {
       const pct = Math.round(((tWatt - sWatt) / sWatt) * 100)
       deltas.wattage = `${tWattStr} vs ${sWattStr} (${pct >= 0 ? '+' : ''}${pct}%)`
@@ -469,8 +483,12 @@ ${candidateLines}
 INSTRUCTIONS:
 - Compare each candidate's fixture class and key specs (type, wattage, lumens, CRI, CCT, environment) against the source.
 - KEEP a candidate if it is a plausible functional substitute — similar fixture class, reasonably close lumen/wattage output, compatible environment and CRI.
-- REJECT a candidate only if there is a clear class mismatch (e.g., an indoor troffer matched against an outdoor area light, or a 5W accent fixture matched against a 100W high-bay).
-- Do not reject based on minor spec differences — those are expected and handled by the scoring system.
+- REJECT a candidate if ANY of these are true:
+  1. Clear fixture class mismatch (e.g., indoor troffer vs outdoor area light, downlight vs high-bay)
+  2. Wattage differs by more than 5× (e.g., source 200W but candidate is 8W — completely different scale)
+  3. Lumen output differs by more than 5× with no overlap (e.g., source 30,000 lm but candidate is 800 lm)
+  4. CCT options have zero overlap AND the source has at least 2 well-defined CCT options (e.g., source 3500K/4000K/5000K but candidate is 6500K only — incompatible color temperature)
+- Do not reject based on minor spec differences (10–30% lumen/wattage delta, one missing CCT) — those are handled by scoring.
 - Respond ONLY with a valid JSON array. No markdown, no explanation outside the JSON.
 
 RESPONSE FORMAT:
@@ -482,20 +500,24 @@ RESPONSE FORMAT:
   try {
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 4096,
+      system: 'You are a commercial lighting cross-reference expert. Respond ONLY with a valid JSON array — no markdown, no explanation, no code fences.',
       messages: [{ role: 'user', content: prompt }],
     })
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : ''
+    const text = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
 
-    // Extract JSON array from response (handle any surrounding whitespace or markdown)
-    const jsonMatch = text.match(/\[[\s\S]*\]/)
-    if (!jsonMatch) {
-      console.warn('[cross-ref] AI post-filter: could not parse JSON response, keeping all candidates')
+    // Strip markdown code fences, then extract the JSON array
+    const stripped = text.replace(/```(?:json)?/g, '').replace(/```/g, '').trim()
+    const start = stripped.indexOf('[')
+    const end = stripped.lastIndexOf(']')
+    if (start === -1 || end === -1 || end <= start) {
+      console.warn('[cross-ref] AI post-filter: could not parse JSON response, keeping all candidates. Response:', text.slice(0, 200))
       return candidates
     }
+    const jsonStr = stripped.slice(start, end + 1)
 
-    const decisions: AiFilterDecision[] = JSON.parse(jsonMatch[0])
+    const decisions: AiFilterDecision[] = JSON.parse(jsonStr)
     const decisionMap = new Map<string, AiFilterDecision>()
     for (const d of decisions) {
       decisionMap.set(d.catalogNumber, d)
@@ -524,6 +546,24 @@ RESPONSE FORMAT:
 type ProductWithManufacturer = Product & {
   manufacturer: { name: string; slug: string }
   category: { name: string; slug: string; path: string | null } | null
+}
+
+// Keywords that identify a fixture class from display name text, used to recover
+// null-canonicalFixtureType products from target manufacturers.
+const CLASS_NAME_KEYWORDS: Partial<Record<string, string[]>> = {
+  VAPOR_TIGHT:       ['vapor tight', 'vapor-tight', 'vaportight', 'weatherproof', 'weather proof'],
+  HIGH_BAY:          ['high bay', 'high-bay', 'highbay'],
+  LOW_BAY:           ['low bay', 'low-bay'],
+  TROFFER:           ['troffer', '2x4', '2x2', '1x4'],
+  FLAT_PANEL:        ['flat panel', 'flat-panel'],
+  DOWNLIGHT:         ['downlight', 'down light', 'recessed'],
+  WALL_PACK:         ['wall pack', 'wall-pack', 'wallpack'],
+  CANOPY:            ['canopy'],
+  AREA_SITE:         ['area light', 'site light', 'area luminaire'],
+  WRAP:              ['wrap', 'utility wrap'],
+  STRIP:             ['strip light', 'striplight'],
+  LINEAR_SUSPENDED:  ['linear pendant', 'pendant linear', 'suspended linear'],
+  LINEAR_SURFACE:    ['linear surface', 'surface linear'],
 }
 
 // Compatible types — some fixture types are interchangeable for cross-reference
@@ -565,23 +605,49 @@ export async function findMatches(
 
   const allowedTypes = (COMPATIBLE_TYPES[sourceType] ?? [sourceType]) as CanonicalFixtureType[]
 
+  // Build null-type expansion conditions: include untyped products from target manufacturer
+  // whose display name/family name suggests the right fixture class, or whose wet-location
+  // flag matches (for VAPOR_TIGHT — products often have only catalog number as display name)
+  const classKeywords = allowedTypes.flatMap(t => CLASS_NAME_KEYWORDS[t] ?? [])
+  const nullTypeClauses: Prisma.ProductWhereInput[] = []
+  if (targetManufacturerSlug) {
+    // Text-based: display name or family name contains a class keyword
+    for (const kw of classKeywords) {
+      nullTypeClauses.push({
+        canonicalFixtureType: null,
+        OR: [
+          { displayName: { contains: kw, mode: 'insensitive' } },
+          { familyName: { contains: kw, mode: 'insensitive' } },
+        ],
+      })
+    }
+    // Signal-based: wet-location flag for VAPOR_TIGHT class (many vapor tights have no
+    // descriptive text in display name but always carry wetLocation: true)
+    if (allowedTypes.includes('VAPOR_TIGHT' as CanonicalFixtureType)) {
+      nullTypeClauses.push({ canonicalFixtureType: null, wetLocation: true })
+    }
+  }
+
   const candidates = await prisma.product.findMany({
     where: {
       isActive: true,
       id: { not: sourceId },
-      canonicalFixtureType: { in: allowedTypes },
+      OR: [
+        { canonicalFixtureType: { in: allowedTypes } },
+        ...nullTypeClauses,
+      ],
       // Cross-reference is between manufacturers
       manufacturerId: { not: source.manufacturerId },
       ...(targetManufacturerSlug ? { manufacturer: { slug: targetManufacturerSlug } } : {}),
     },
-    take: 50,
+    take: 150,
     include: {
       manufacturer: { select: { name: true, slug: true } },
       category: catSelect,
     },
   }) as ProductWithManufacturer[]
 
-  console.log(`[cross-ref] ${source.catalogNumber} (${sourceType}) → ${candidates.length} candidates of types [${allowedTypes.join(', ')}]`)
+  console.log(`[cross-ref] ${source.catalogNumber} (${sourceType}) → ${candidates.length} candidates of types [${allowedTypes.join(', ')}] (incl. ${nullTypeClauses.length > 0 ? 'null-type keyword matches' : 'no null-type expansion'})`)
 
   const filterLevel = 'canonical'
 
@@ -607,9 +673,14 @@ export async function findMatches(
     const { score, reasons } = scoreMatch(source, target)
     // Force BUDGET_ALTERNATIVE for Contractor Select products regardless of score
     const isContractorSelect = target.category?.path?.startsWith('contractor-select') ?? false
-    const matchType = isContractorSelect
+    // Cap retrofit kits at SIMILAR — a retrofit kit is not a standalone fixture replacement
+    const isRetrofitKit = target.canonicalFixtureType === 'RETROFIT_KIT'
+    let matchType = isContractorSelect
       ? MatchType.BUDGET_ALTERNATIVE
       : determineMatchType(score, source, target)
+    if (isRetrofitKit && (matchType === MatchType.DIRECT_REPLACEMENT || matchType === MatchType.FUNCTIONAL_EQUIVALENT)) {
+      matchType = MatchType.SIMILAR
+    }
     const snapshot = buildComparisonSnapshot(source, target)
     const matchReason = reasons.slice(0, 3).join('; ')
 
@@ -649,8 +720,8 @@ export async function findMatches(
   // Sort by confidence descending before AI post-filter so the AI sees ranked candidates
   matches.sort((a, b) => b.confidence - a.confidence)
 
-  // AI post-filter: sanity-check fixture class and spec compatibility
-  const filteredMatches = await aiPostFilter(source, matches, candidateProductMap)
+  // AI post-filter: sanity-check fixture class and spec compatibility (top 20 by confidence)
+  const filteredMatches = await aiPostFilter(source, matches.slice(0, 20), candidateProductMap)
 
   // Only upsert candidates that survived the AI post-filter
   const survivingIds = new Set(filteredMatches.map((m) => m.productId))

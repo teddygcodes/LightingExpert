@@ -40,7 +40,25 @@ export interface SearchProductsParams {
   environment?: 'indoor' | 'outdoor' | 'both'
   dlcListed?: boolean
   wetLocation?: boolean
+  voltage?: string
   limit?: number
+}
+
+// Map a stated voltage to the set of DB Voltage enum values that are compatible.
+// e.g. "V277" → ["V277", "V120_277", "UNIVERSAL"]
+// e.g. "V480" → ["V480", "V347_480", "UNIVERSAL"]
+function compatibleVoltages(stated: string): string[] {
+  const always = ['UNIVERSAL', 'V120_277']  // universal/multi-volt are always included
+  switch (stated) {
+    case 'V120':      return ['V120', ...always]
+    case 'V277':      return ['V277', 'V120_277', 'UNIVERSAL']
+    case 'V120_277':  return ['V120', 'V277', 'V120_277', 'UNIVERSAL']
+    case 'V347':      return ['V347', 'V120_347', 'V347_480', 'UNIVERSAL']
+    case 'V480':      return ['V480', 'V347_480', 'UNIVERSAL']
+    case 'V347_480':  return ['V347', 'V480', 'V347_480', 'UNIVERSAL']
+    case 'UNIVERSAL': return []  // no filter — UNIVERSAL means any voltage is fine
+    default:          return []
+  }
 }
 
 const PRODUCT_SELECT = {
@@ -64,6 +82,7 @@ const PRODUCT_SELECT = {
   specSheets: true,
   productPageUrl: true,
   canonicalFixtureType: true,
+  orderingMatrixId: true,
   manufacturer: { select: { name: true, slug: true } },
 } as const
 
@@ -139,23 +158,46 @@ export async function searchProducts(params: SearchProductsParams): Promise<Sear
   if (params.wetLocation) {
     where.wetLocation = true
   }
+  if (params.voltage && params.voltage !== 'UNIVERSAL') {
+    const voltages = compatibleVoltages(params.voltage)
+    if (voltages.length > 0) {
+      if (!Array.isArray(where.AND)) where.AND = []
+      ;(where.AND as Prisma.ProductWhereInput[]).push({
+        OR: [
+          { voltage: null },  // null voltage = unknown, keep it rather than reject
+          { voltage: { in: voltages as Prisma.EnumVoltageNullableFilter['in'] } },
+        ],
+      })
+    }
+  }
 
-  // Form factor tokens (e.g. "2x4", "1x4", "2x2") — these match the formFactor field,
-  // not tsvector, because configurable products like CPX store "1X4, 2X2, 2X4" in
-  // formFactor but tsvector only covers catalog/family/description text.
+  // Form factor / shape tokens — match against the formFactor DB field.
+  // Grid sizes (e.g. "2x4") use direct contains.
+  // Shape descriptors (e.g. "round") map to multiple formFactor patterns
+  // because the DB stores values like "UFO", "ROUND_UFO", "4_INCH_ROUND", "CIRCULAR_HIGH_BAY".
   if (params.query) {
-    const FORM_FACTOR_RE = /^\d+x\d+$/i
-    const formFactorTokens = params.query.split(/\s+/).filter(t => FORM_FACTOR_RE.test(t))
-    if (formFactorTokens.length > 0) {
-      const nonFFQuery = params.query.split(/\s+/).filter(t => !FORM_FACTOR_RE.test(t)).join(' ')
-      // Add a formFactor filter: product must contain the form factor token (e.g. "2X4")
-      const ffClauses = formFactorTokens.map(t =>
-        ({ formFactor: { contains: t, mode: 'insensitive' as const } })
-      )
+    const GRID_RE = /^\d+x\d+$/i
+    const SHAPE_TOKEN_MAP: Record<string, string[]> = {
+      round:    ['ROUND', 'UFO', 'CIRCULAR'],
+      ufo:      ['UFO', 'ROUND'],
+      circular: ['CIRCULAR', 'ROUND', 'UFO'],
+      linear:   ['LINEAR', 'FT_LINEAR'],
+    }
+    const queryTokens = params.query.split(/\s+/)
+    const gridTokens  = queryTokens.filter(t => GRID_RE.test(t))
+    const shapeTokens = queryTokens.filter(t => t.toLowerCase() in SHAPE_TOKEN_MAP)
+    const remaining   = queryTokens.filter(t => !GRID_RE.test(t) && !(t.toLowerCase() in SHAPE_TOKEN_MAP)).join(' ')
+
+    if (gridTokens.length > 0 || shapeTokens.length > 0) {
+      const ffClauses: Prisma.ProductWhereInput[] = [
+        ...gridTokens.map(t => ({ formFactor: { contains: t, mode: 'insensitive' as const } })),
+        ...shapeTokens.flatMap(t =>
+          (SHAPE_TOKEN_MAP[t.toLowerCase()] ?? []).map(p => ({ formFactor: { contains: p, mode: 'insensitive' as const } }))
+        ),
+      ]
       if (!Array.isArray(where.AND)) where.AND = []
       ;(where.AND as Prisma.ProductWhereInput[]).push({ OR: ffClauses })
-      // Replace params.query with the remaining non-form-factor tokens
-      params = { ...params, query: nonFFQuery || undefined }
+      params = { ...params, query: remaining || undefined }
     }
   }
 
@@ -170,6 +212,8 @@ export async function searchProducts(params: SearchProductsParams): Promise<Sear
           isActive: true,
           manufacturer: { name: { contains: mfgToken, mode: 'insensitive' } },
           ...(where.categoryId ? { categoryId: where.categoryId } : {}),
+          ...(where.canonicalFixtureType ? { canonicalFixtureType: where.canonicalFixtureType } : {}),
+          ...(where.manufacturer ? { manufacturer: where.manufacturer as Prisma.ManufacturerWhereInput } : {}),
         }
 
         const b1 = await prisma.product.findMany({
@@ -199,11 +243,20 @@ export async function searchProducts(params: SearchProductsParams): Promise<Sear
     // tsvector fallback
     try {
       const escaped = params.query.replace(/['"\\]/g, '')
+      const tsMfrFilter = params.manufacturerSlug
+        ? Prisma.sql`AND m.slug = ${params.manufacturerSlug}`
+        : Prisma.sql``
+      const tsFtFilter = params.fixtureType
+        ? Prisma.sql`AND p."canonicalFixtureType"::text = ${params.fixtureType}`
+        : Prisma.sql``
       const rows = await prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "Product"
-        WHERE "isActive" = true
-          AND search_vector @@ plainto_tsquery('english', ${escaped})
-        ORDER BY ts_rank(search_vector, plainto_tsquery('english', ${escaped})) DESC
+        SELECT p.id FROM "Product" p
+        JOIN "Manufacturer" m ON m.id = p."manufacturerId"
+        WHERE p."isActive" = true
+          AND p.search_vector @@ plainto_tsquery('english', ${escaped})
+          ${tsMfrFilter}
+          ${tsFtFilter}
+        ORDER BY ts_rank(p.search_vector, plainto_tsquery('english', ${escaped})) DESC
         LIMIT ${Prisma.raw(String(limit))}
       `
       if (rows.length > 0) {
