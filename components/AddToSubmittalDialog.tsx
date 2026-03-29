@@ -31,15 +31,13 @@ export default function AddToSubmittalDialog({ product, onClose, onAdded }: Prop
   const [error, setError] = useState<string | null>(null)
   const [matrixNotFound, setMatrixNotFound] = useState(false)
 
-  // Load existing DRAFT submittals
+  // Load all existing submittals (DRAFT and generated)
   useEffect(() => {
     fetch('/api/submittals')
       .then(r => r.json())
       .then((data: SubmittalSummary[]) => {
-        const drafts = data.filter(s => s.status === 'DRAFT')
-        setSubmittals(drafts)
-        // Default to first DRAFT if one exists
-        if (drafts.length > 0) setTarget(drafts[0].id)
+        setSubmittals(data)
+        if (data.length > 0) setTarget(data[0].id)
       })
       .catch(() => {/* leave empty, 'new' is default */})
       .finally(() => setLoadingSubmittals(false))
@@ -174,7 +172,7 @@ export default function AddToSubmittalDialog({ product, onClose, onAdded }: Prop
           {!matrixNotFound ? (
             <ProductConfigurator
               productId={product.id}
-              currentOverride={catalogOverride}
+              currentOverride={product.catalogNumber}
               onCatalogBuilt={(cat) => setCatalogOverride(cat)}
               onClose={() => setCatalogOverride(product.catalogNumber)}
               onNotFound={() => setMatrixNotFound(true)}
@@ -236,6 +234,7 @@ export default function AddToSubmittalDialog({ product, onClose, onAdded }: Prop
                 {submittals.map(s => (
                   <option key={s.id} value={s.id}>
                     {s.projectName} ({s.items.length} fixture{s.items.length !== 1 ? 's' : ''})
+                    {s.status !== 'DRAFT' ? ` • ${s.status}` : ''}
                   </option>
                 ))}
                 <option value="new">+ Create new submittal…</option>
