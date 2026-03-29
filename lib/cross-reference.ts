@@ -553,6 +553,18 @@ RESPONSE FORMAT:
   }
 }
 
+// ─── Exported for testing ─────────────────────────────────────────────────────
+
+export {
+  voltagesCompatible,
+  mountingCompatible,
+  runHardRejects,
+  rangeOverlapScore,
+  scoreMatch,
+  determineMatchType,
+}
+export type { ProductWithManufacturer }
+
 // ─── Main: Find Matches ───────────────────────────────────────────────────────
 
 type ProductWithManufacturer = Product & {
