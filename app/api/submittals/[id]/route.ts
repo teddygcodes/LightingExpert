@@ -149,7 +149,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  await prisma.submittalItem.deleteMany({ where: { submittalId: id } })
-  await prisma.submittal.delete({ where: { id } })
-  return NextResponse.json({ ok: true })
+  try {
+    await prisma.$transaction([
+      prisma.submittalItem.deleteMany({ where: { submittalId: id } }),
+      prisma.submittal.delete({ where: { id } }),
+    ])
+    return NextResponse.json({ ok: true })
+  } catch {
+    return NextResponse.json({ error: 'Submittal not found' }, { status: 404 })
+  }
 }
