@@ -144,7 +144,7 @@ export async function GET(
       }
     } catch (err) {
       console.error(`[configurator] On-demand extraction failed for product ${id}:`, err instanceof Error ? err.message : err)
-      // Fall through — return hasMatrix: false
+      return NextResponse.json({ hasMatrix: false, extractionFailed: true })
     }
   }
 

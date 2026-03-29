@@ -225,7 +225,13 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
         return r.json()
       })
       .then(data => {
-        if (!data.hasMatrix) { setLoading(false); if (onNotFound) onNotFound(); else onClose(); return }
+        if (!data.hasMatrix) {
+          setLoading(false)
+          if (data.extractionFailed) { setError('Failed to extract ordering matrix. Please try again.'); return }
+          if (data.rateLimited) { setError('Too many requests. Please wait a moment and try again.'); return }
+          if (onNotFound) onNotFound(); else onClose()
+          return
+        }
         const m = data.matrix as OrderingMatrixData
         setMatrix(m)
 

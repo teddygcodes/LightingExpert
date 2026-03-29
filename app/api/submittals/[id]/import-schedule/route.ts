@@ -72,12 +72,15 @@ export async function POST(
   try {
     // Strip markdown fences if Claude adds them despite instructions
     const cleaned = raw.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim()
-    extracted = JSON.parse(cleaned)
+    if (!cleaned) throw new Error('empty response')
+    const parsed = JSON.parse(cleaned)
+    if (!Array.isArray(parsed)) throw new Error('not an array')
+    extracted = parsed
   } catch {
-    return NextResponse.json({ error: 'Could not parse fixture schedule from document', raw }, { status: 422 })
+    return NextResponse.json({ error: 'Could not parse fixture schedule from document' }, { status: 422 })
   }
 
-  if (!Array.isArray(extracted) || extracted.length === 0) {
+  if (extracted.length === 0) {
     return NextResponse.json({ imported: [], unmatched: [] })
   }
 
