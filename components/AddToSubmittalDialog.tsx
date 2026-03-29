@@ -169,7 +169,29 @@ export default function AddToSubmittalDialog({ product, onClose, onAdded }: Prop
 
           {/* Section 1 — Configuration */}
           <div style={sectionLabel}>Part Number Configuration</div>
-          {!matrixNotFound ? (
+          {!matrixNotFound && catalogOverride !== product.catalogNumber ? (
+            /* ── Confirmed selection banner ── */
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--border)',
+            }}>
+              <div>
+                <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: 'var(--text)', letterSpacing: '0.02em' }}>
+                  {catalogOverride}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                  ✓ Configuration selected
+                </div>
+              </div>
+              <button
+                onClick={() => setCatalogOverride(product.catalogNumber)}
+                style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px', textDecoration: 'underline' }}
+              >
+                Change
+              </button>
+            </div>
+          ) : !matrixNotFound ? (
+            /* ── Configurator (no selection yet) ── */
             <ProductConfigurator
               productId={product.id}
               currentOverride={product.catalogNumber}
@@ -178,6 +200,7 @@ export default function AddToSubmittalDialog({ product, onClose, onAdded }: Prop
               onNotFound={() => setMatrixNotFound(true)}
             />
           ) : (
+            /* ── No matrix fallback ── */
             <>
               <input
                 type="text"
