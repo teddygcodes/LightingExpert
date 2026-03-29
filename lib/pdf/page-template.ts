@@ -1,17 +1,9 @@
-import { PDFPage, PDFFont, rgb } from 'pdf-lib'
+import { PDFPage, PDFFont } from 'pdf-lib'
+import { MARGINS, HEADER_FOOTER, PDF_COLORS } from './layout-constants'
 
-const BLACK = rgb(0, 0, 0)
-const WHITE = rgb(1, 1, 1)
-const GRAY = rgb(0.42, 0.42, 0.42)
-const RULE_COLOR = rgb(0.80, 0.80, 0.80)
-const DARK_BAR = rgb(0.102, 0.102, 0.102)  // #1a1a1a
-
-const SIDE_MARGIN = 36
-const HEADER_Y_FROM_TOP = 30  // baseline from top (Style A)
-const FOOTER_Y_BASELINE = 20
-const FOOTER_RULE_Y = 33      // rule above footer text
-
-const DARK_BAR_HEIGHT = 45    // Style B dark bar height
+const { SIDE } = MARGINS
+const { HEADER_Y_FROM_TOP, FOOTER_Y_BASELINE, FOOTER_RULE_Y, DARK_BAR_HEIGHT } = HEADER_FOOTER
+const { BLACK, WHITE, GRAY, RULE: RULE_COLOR, DARK_BAR } = PDF_COLORS
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 1) + '…' : s
@@ -51,7 +43,7 @@ export function addHeaderFooter(
     // Project name — far left, 9pt regular white
     const projectText = truncate(opts.projectName, 50)
     page.drawText(projectText, {
-      x: SIDE_MARGIN,
+      x: SIDE,
       y: barY + (DARK_BAR_HEIGHT - 9) / 2,
       font: regular,
       size: 9,
@@ -91,7 +83,7 @@ export function addHeaderFooter(
     const headerY = height - HEADER_Y_FROM_TOP
 
     page.drawText(truncate(opts.projectName, 50), {
-      x: SIDE_MARGIN,
+      x: SIDE,
       y: headerY,
       font: bold,
       size: 9,
@@ -105,7 +97,7 @@ export function addHeaderFooter(
       )
       const labelWidth = regular.widthOfTextAtSize(rightLabel, 9)
       page.drawText(rightLabel, {
-        x: width - SIDE_MARGIN - labelWidth,
+        x: width - SIDE - labelWidth,
         y: headerY,
         font: regular,
         size: 9,

@@ -1,8 +1,7 @@
 import { PDFDocument, PDFPage, PDFFont, rgb } from 'pdf-lib'
+import { PAGE, MARGINS, TABLE, PDF_COLORS } from './layout-constants'
 
-const BLACK = rgb(0, 0, 0)
-const DARK = rgb(0.1, 0.1, 0.1)
-const LIGHT_GRAY = rgb(0.93, 0.93, 0.93)
+const { BLACK, DARK, LIGHT_GRAY } = PDF_COLORS
 
 export interface ScheduleRow {
   type: string
@@ -30,14 +29,14 @@ const COLS = [
   { label: 'LOCATION',  key: 'location',     x: 528, w: 84  }, // extends to 612
 ] as const
 
-const PAGE_W = 612
-const PAGE_H = 792
-const MARGIN_TOP = 752  // top of usable area (below header/footer reserved area)
-const MARGIN_BOTTOM = 52 // bottom of usable area (above footer reserved area)
-const HEADER_H = 22
-const ROW_H = 18
-const TABLE_LEFT = 36
-const TABLE_RIGHT = 576
+const PAGE_W = PAGE.LETTER_W
+const PAGE_H = PAGE.LETTER_H
+const MARGIN_TOP = MARGINS.TOP_USABLE
+const MARGIN_BOTTOM = MARGINS.BOTTOM_USABLE
+const HEADER_H = TABLE.HEADER_ROW_H
+const ROW_H = TABLE.ROW_H
+const TABLE_LEFT = TABLE.LEFT
+const TABLE_RIGHT = TABLE.RIGHT
 
 function truncate(s: string, maxChars: number): string {
   return s.length > maxChars ? s.slice(0, maxChars - 1) + '…' : s
