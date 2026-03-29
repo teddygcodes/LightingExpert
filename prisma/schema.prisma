@@ -328,9 +328,7 @@ model Product {
   submittalItems     SubmittalItem[]
 
   @@unique([manufacturerId, catalogNumber])
-  @@index([manufacturerId])
   @@index([categoryId])
-  @@index([isActive])
   @@index([isActive, categoryId, manufacturerId])
   @@index([dlcListed])
   @@index([lastCrawled])
@@ -363,6 +361,7 @@ model CrossReference {
 
   @@unique([sourceProductId, targetProductId])
   @@index([sourceProductId])
+  @@index([sourceProductId, confidence])
   @@index([targetProductId])
   @@index([targetProductId, confidence])
 }
@@ -391,6 +390,7 @@ model Submittal {
 
   @@index([status])
   @@index([createdAt])
+  @@index([status, createdAt])
 }
 
 model SubmittalItem {

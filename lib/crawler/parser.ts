@@ -50,46 +50,66 @@ export function extractByRegex(text: string): { specs: RawSpecs; provenance: Fie
   const specs: RawSpecs = {}
   const provenance: FieldProvenanceMap = {}
 
-  // Wattage — single or range
+  // Wattage — single or range (valid: 0.1–10000W)
   const wattRange = text.match(/(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*[Ww](?:att)?s?\b/)
   const wattSingle = text.match(/(\d+(?:\.\d+)?)\s*[Ww](?:att)?s?\b/)
   if (wattRange) {
-    specs.wattageMin = parseFloat(wattRange[1])
-    specs.wattageMax = parseFloat(wattRange[2])
-    provenance.wattageMin = fp('REGEX', 0.9, wattRange[0])
-    provenance.wattageMax = fp('REGEX', 0.9, wattRange[0])
+    const wMin = parseFloat(wattRange[1])
+    const wMax = parseFloat(wattRange[2])
+    if (wMin >= 0.1 && wMax <= 10_000 && wMin < wMax) {
+      specs.wattageMin = wMin
+      specs.wattageMax = wMax
+      provenance.wattageMin = fp('REGEX', 0.9, wattRange[0])
+      provenance.wattageMax = fp('REGEX', 0.9, wattRange[0])
+    }
   } else if (wattSingle) {
-    specs.wattage = parseFloat(wattSingle[1])
-    provenance.wattage = fp('REGEX', 0.9, wattSingle[0])
+    const w = parseFloat(wattSingle[1])
+    if (w >= 0.1 && w <= 10_000) {
+      specs.wattage = w
+      provenance.wattage = fp('REGEX', 0.9, wattSingle[0])
+    }
   }
 
-  // Lumens — single or range
-  const lumRange = text.match(/(\d{3,5})\s*[-–]\s*(\d{3,5})\s*[Ll][Mm]/)
-  const lumSingle = text.match(/(\d{3,5})\s*[Ll][Mm]/)
+  // Lumens — single or range (valid: 100–500000 lm)
+  const lumRange = text.match(/(\d{3,6})\s*[-–]\s*(\d{3,6})\s*[Ll][Mm]/)
+  const lumSingle = text.match(/(\d{3,6})\s*[Ll][Mm]/)
   if (lumRange) {
-    specs.lumensMin = parseInt(lumRange[1])
-    specs.lumensMax = parseInt(lumRange[2])
-    provenance.lumensMin = fp('REGEX', 0.9, lumRange[0])
-    provenance.lumensMax = fp('REGEX', 0.9, lumRange[0])
+    const lMin = parseInt(lumRange[1])
+    const lMax = parseInt(lumRange[2])
+    if (lMin >= 100 && lMax <= 500_000 && lMin < lMax) {
+      specs.lumensMin = lMin
+      specs.lumensMax = lMax
+      provenance.lumensMin = fp('REGEX', 0.9, lumRange[0])
+      provenance.lumensMax = fp('REGEX', 0.9, lumRange[0])
+    }
   } else if (lumSingle) {
-    specs.lumens = parseInt(lumSingle[1])
-    provenance.lumens = fp('REGEX', 0.9, lumSingle[0])
+    const l = parseInt(lumSingle[1])
+    if (l >= 100 && l <= 500_000) {
+      specs.lumens = l
+      provenance.lumens = fp('REGEX', 0.9, lumSingle[0])
+    }
   }
 
-  // CRI
+  // CRI (valid: 50–100)
   const criMatch = text.match(/CRI\s*[>≥]?\s*(\d{2})\+?/i) ||
     text.match(/(\d{2})\s*CRI/i) ||
     text.match(/Color\s+Rendering\s+Index[:\s]+(\d{2})/i)
   if (criMatch) {
-    specs.cri = parseInt(criMatch[1])
-    provenance.cri = fp('REGEX', 0.85, criMatch[0])
+    const cri = parseInt(criMatch[1])
+    if (cri >= 50 && cri <= 100) {
+      specs.cri = cri
+      provenance.cri = fp('REGEX', 0.85, criMatch[0])
+    }
   }
 
-  // CCT options — extract all K values
-  const cctMatches = [...text.matchAll(/(\d{4})[Kk]\b/g)]
+  // CCT options — extract all K values (valid: 1800–10000K)
+  const cctMatches = [...text.matchAll(/(\d{4,5})[Kk]\b/g)]
   if (cctMatches.length > 0) {
-    specs.cctOptions = [...new Set(cctMatches.map((m) => parseInt(m[1])))].sort()
-    provenance.cctOptions = fp('REGEX', 0.9, cctMatches.map((m) => m[0]).join(', '))
+    const valid = cctMatches.map((m) => parseInt(m[1])).filter((k) => k >= 1800 && k <= 10_000)
+    if (valid.length > 0) {
+      specs.cctOptions = [...new Set(valid)].sort()
+      provenance.cctOptions = fp('REGEX', 0.9, cctMatches.map((m) => m[0]).join(', '))
+    }
   }
 
   // Voltage

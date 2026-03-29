@@ -16,9 +16,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <a href="#main-content" className="skip-nav">
+          Skip to main content
+        </a>
         <Topbar />
         <Sidebar />
         <main
+          id="main-content"
+          role="main"
           style={{
             marginTop: 44,
             marginLeft: 260,

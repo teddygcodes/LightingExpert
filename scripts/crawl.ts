@@ -20,6 +20,7 @@ import {
   normalizeDimmingTypes,
   normalizeMountingTypes,
 } from '../lib/crawler/normalize'
+import { AiBudget } from '../lib/crawler/config'
 
 const prisma = new PrismaClient()
 
@@ -39,6 +40,10 @@ const familiesArg = args.find((a) => a.startsWith('--families='))
 const familiesToCrawl = familiesArg
   ? familiesArg.replace('--families=', '').split(',').map(s => s.trim()).filter(Boolean)
   : undefined
+
+const aiBudgetArg = args.find((a) => a.startsWith('--ai-budget='))
+const aiBudgetMax = aiBudgetArg ? parseInt(aiBudgetArg.replace('--ai-budget=', ''), 10) || 50 : 50
+const aiBudget = new AiBudget(aiBudgetMax)
 
 const categoriesArg = args.find((a) => a.startsWith('--categories='))
 const defaultCategories = manufacturer === 'acuity'
@@ -69,6 +74,7 @@ async function run() {
   console.log('=== Atlantis KB Lighting Crawl ===')
   console.log(`Manufacturer: ${manufacturer}`)
   console.log(`Categories: ${categories.join(', ')}`)
+  console.log(`AI Budget: ${aiBudgetMax} calls`)
   console.log(`Started: ${new Date().toISOString()}`)
   console.log('')
 
@@ -183,7 +189,29 @@ async function run() {
     }
     stats.found = products.length
 
-    for (const p of products) {
+    // Zero-product detection — warn if site structure may have changed
+    if (products.length === 0 && categories.length > 0) {
+      const warning = `ZERO_PRODUCTS: ${manufacturer} returned 0 products for categories: ${categories.join(', ')}. Site structure may have changed.`
+      console.error(`\n[WARNING] ${warning}\n`)
+      errors.push(warning)
+    }
+
+    // Check against last successful crawl for suspicious drop
+    if (products.length > 0) {
+      const lastGood = await prisma.crawlLog.findFirst({
+        where: { manufacturerId: elite.id, status: 'COMPLETED', productsFound: { gt: 0 } },
+        orderBy: { startedAt: 'desc' },
+        select: { productsFound: true },
+      })
+      if (lastGood && products.length < lastGood.productsFound * 0.1) {
+        const warning = `PRODUCT_DROP: Found ${products.length} products, but last successful crawl found ${lastGood.productsFound}. Possible site structure change.`
+        console.warn(`[WARNING] ${warning}`)
+        errors.push(warning)
+      }
+    }
+
+    for (let i = 0; i < products.length; i++) {
+      const p = products[i]
       try {
         await upsertProduct(p as EliteProduct, elite.id, rootCategoryMap, familyCategoryCache, stats)
       } catch (err: unknown) {
@@ -191,6 +219,21 @@ async function run() {
         const msg = err instanceof Error ? err.message : String(err)
         errors.push(`${p.catalogNumber}: ${msg}`)
         console.error(`[DB] Failed to save ${p.catalogNumber}:`, msg)
+      }
+
+      // Incremental progress save every 100 products
+      if ((i + 1) % 100 === 0) {
+        await prisma.crawlLog.update({
+          where: { id: crawlLog.id },
+          data: {
+            productsFound: stats.found,
+            productsNew: stats.new,
+            productsUpdated: stats.updated,
+            productsCached: stats.cached,
+            parseFailures: stats.failures,
+          },
+        })
+        console.log(`[Progress] ${i + 1}/${products.length} processed`)
       }
     }
 
@@ -218,6 +261,7 @@ async function run() {
     console.log(`Updated:  ${stats.updated}`)
     console.log(`Failures: ${stats.failures}`)
     console.log(`Avg Confidence: ${(avgConfidence * 100).toFixed(0)}%`)
+    console.log(`AI Calls: ${aiBudget.totalUsed}/${aiBudgetMax}`)
     console.log(`Families created/upserted: ${familyCategoryCache.size}`)
     if (errors.length > 0) {
       console.log(`\nErrors (${errors.length}):`)

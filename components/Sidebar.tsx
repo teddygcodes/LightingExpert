@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useClickOutside } from '@/lib/hooks/useClickOutside'
 
 interface ChatItem {
   id: string
@@ -54,14 +55,7 @@ function ChatRow({ chat, active, projects, onAssign, onDelete }: ChatRowProps) {
   const menuRef = useRef<HTMLDivElement>(null)
 
   // Close menu on outside click
-  useEffect(() => {
-    if (!menuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [menuOpen])
+  useClickOutside(menuRef, useCallback(() => setMenuOpen(false), []))
 
   return (
     <div
@@ -250,7 +244,7 @@ export default function Sidebar() {
   const groups = groupByRecency(chats)
 
   return (
-    <nav style={{
+    <nav aria-label="Main navigation" style={{
       width: 260,
       background: 'var(--surface)',
       borderRight: '1px solid var(--border)',

@@ -49,46 +49,45 @@ export async function GET(req: NextRequest) {
       try {
         const mfgToken = tokens[0]
         const rest = tokens.slice(1).join(' ')
-        const mfgBase: Prisma.ProductWhereInput = {
-          isActive: true,
-          manufacturer: { name: { contains: mfgToken, mode: 'insensitive' } },
-          ...(categoryId ? { categoryId: where.categoryId } : {}),
-        }
 
-        // Bucket 1: catalogNumber startsWith rest (highest priority)
-        const b1 = await prisma.product.findMany({
-          where: { ...mfgBase, catalogNumber: { startsWith: rest, mode: 'insensitive' } },
-          include: { manufacturer: { select: { name: true, slug: true } } },
-          take: pageSize,
-        })
-        const b1Ids = new Set(b1.map((p) => p.id))
+        // Build optional category filter for raw SQL
+        const catFilter =
+          where.categoryId && typeof where.categoryId === 'object' && 'in' in where.categoryId
+            ? Prisma.sql`AND p."categoryId" = ANY(${(where.categoryId as { in: string[] }).in}::text[])`
+            : where.categoryId && typeof where.categoryId === 'string'
+              ? Prisma.sql`AND p."categoryId" = ${where.categoryId as string}`
+              : Prisma.sql``
 
-        // Bucket 2: familyName startsWith rest
-        const b2 = await prisma.product.findMany({
-          where: {
-            ...mfgBase,
-            familyName: { startsWith: rest, mode: 'insensitive' },
-            NOT: { id: { in: [...b1Ids] } },
-          },
-          include: { manufacturer: { select: { name: true, slug: true } } },
-          take: pageSize,
-        })
-        const b12Ids = new Set([...b1Ids, ...b2.map((p) => p.id)])
+        // Single ranked query replaces 3 sequential bucket queries
+        const ranked = await prisma.$queryRaw<{ id: string }[]>`
+          SELECT p.id FROM "Product" p
+          JOIN "Manufacturer" m ON m.id = p."manufacturerId"
+          WHERE p."isActive" = true
+            AND m.name ILIKE '%' || ${mfgToken} || '%'
+            ${catFilter}
+            AND (
+              p."catalogNumber" ILIKE ${rest} || '%'
+              OR p."familyName" ILIKE ${rest} || '%'
+              OR p."catalogNumber" ILIKE '%' || ${rest} || '%'
+            )
+          ORDER BY
+            CASE
+              WHEN p."catalogNumber" ILIKE ${rest} || '%' THEN 1
+              WHEN p."familyName" ILIKE ${rest} || '%' THEN 2
+              ELSE 3
+            END,
+            p."catalogNumber" ASC
+          LIMIT ${pageSize}
+        `
 
-        // Bucket 3: catalogNumber contains rest (lowest priority)
-        const b3 = await prisma.product.findMany({
-          where: {
-            ...mfgBase,
-            catalogNumber: { contains: rest, mode: 'insensitive' },
-            NOT: { id: { in: [...b12Ids] } },
-          },
-          include: { manufacturer: { select: { name: true, slug: true } } },
-          take: pageSize,
-        })
-
-        const merged = [...b1, ...b2, ...b3].slice(0, pageSize)
-        if (merged.length > 0) {
-          return NextResponse.json({ data: merged, total: merged.length, page: 1, pageSize })
+        if (ranked.length > 0) {
+          const ids = ranked.map((r) => r.id)
+          const products = await prisma.product.findMany({
+            where: { id: { in: ids } },
+            include: { manufacturer: { select: { name: true, slug: true } } },
+          })
+          const sorted = ids.map((id) => products.find((p) => p.id === id)).filter(Boolean)
+          return NextResponse.json({ data: sorted, total: sorted.length, page: 1, pageSize })
         }
         // Fall through to tsvector if no manufacturer-prefixed results found
       } catch {
@@ -141,5 +140,9 @@ export async function GET(req: NextRequest) {
     prisma.product.count({ where }),
   ])
 
-  return NextResponse.json({ data: products, total, page, pageSize })
+  const response = NextResponse.json({ data: products, total, page, pageSize })
+  if (!search && !categoryId) {
+    response.headers.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600')
+  }
+  return response
 }

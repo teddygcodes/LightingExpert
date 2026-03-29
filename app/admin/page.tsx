@@ -1,12 +1,5 @@
 import { prisma } from '@/lib/db'
-
-const STATUS_COLOR: Record<string, string> = {
-  RUNNING:     '#0078d4',
-  COMPLETED:   '#107c10',
-  FAILED:      '#d13438',
-  PARTIAL:     '#ff8c00',
-  INTERRUPTED: '#6b6b6b',
-}
+import { CRAWL_STATUS_COLOR, COLORS } from '@/lib/design-tokens'
 
 export default async function AdminPage() {
   const logs = await prisma.crawlLog.findMany({
@@ -36,8 +29,8 @@ export default async function AdminPage() {
           { label: 'Crawl Runs', value: logs.length },
         ].map(stat => (
           <div key={stat.label} style={{ background: '#fff', border: '1px solid #e0e0e0', padding: '16px 20px' }}>
-            <div style={{ fontSize: 28, fontWeight: 700, color: '#d13438' }}>{stat.value}</div>
-            <div style={{ fontSize: 12, color: '#6b6b6b', marginTop: 4 }}>{stat.label}</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: COLORS.accent }}>{stat.value}</div>
+            <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 4 }}>{stat.label}</div>
           </div>
         ))}
       </div>
@@ -45,7 +38,7 @@ export default async function AdminPage() {
       {/* Crawl trigger */}
       <div style={{ background: '#fff', border: '1px solid #e0e0e0', padding: 20, marginBottom: 24 }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Crawler</div>
-        <div style={{ fontSize: 12, color: '#6b6b6b', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: COLORS.textMuted, marginBottom: 12 }}>
           The crawler runs as a standalone Node.js script. To start a crawl, run the following command in your terminal:
         </div>
         <pre style={{ background: '#f3f3f3', padding: '10px 14px', fontSize: 12, fontFamily: 'monospace', border: '1px solid #e0e0e0' }}>
@@ -62,7 +55,7 @@ export default async function AdminPage() {
           Crawl History
         </div>
         {logs.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#6b6b6b', fontSize: 13 }}>
+          <div style={{ padding: '40px', textAlign: 'center', color: COLORS.textMuted, fontSize: 13 }}>
             No crawl runs yet. Run <code>npm run crawl</code> to start.
           </div>
         ) : (
@@ -82,22 +75,22 @@ export default async function AdminPage() {
             <tbody>
               {logs.map((log, i) => (
                 <tr key={log.id} style={{ background: i % 2 === 0 ? '#fff' : '#f9f9f9', borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '8px 12px', color: '#6b6b6b' }}>
+                  <td style={{ padding: '8px 12px', color: COLORS.textMuted }}>
                     {new Date(log.startedAt).toLocaleString()}
                   </td>
                   <td style={{ padding: '8px 12px' }}>{log.manufacturer?.name ?? '—'}</td>
                   <td style={{ padding: '8px 12px' }}>
-                    <span style={{ padding: '2px 8px', fontSize: 11, fontWeight: 600, background: STATUS_COLOR[log.status] || '#6b6b6b', color: '#fff' }}>
+                    <span style={{ padding: '2px 8px', fontSize: 11, fontWeight: 600, background: CRAWL_STATUS_COLOR[log.status] || COLORS.textMuted, color: '#fff' }}>
                       {log.status}
                     </span>
                   </td>
                   <td style={{ padding: '8px 12px', textAlign: 'center' }}>{log.productsFound}</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', color: '#107c10' }}>{log.productsNew + log.productsUpdated}</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', color: log.parseFailures > 0 ? '#d13438' : '#6b6b6b' }}>{log.parseFailures}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center', color: COLORS.green }}>{log.productsNew + log.productsUpdated}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center', color: log.parseFailures > 0 ? COLORS.accent : COLORS.textMuted }}>{log.parseFailures}</td>
                   <td style={{ padding: '8px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
                     {duration(log.startedAt, log.completedAt)}
                   </td>
-                  <td style={{ padding: '8px 12px', color: '#d13438', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '8px 12px', color: COLORS.accent, fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {log.errors ? JSON.stringify(log.errors).slice(0, 60) : ''}
                   </td>
                 </tr>

@@ -59,6 +59,36 @@ a:hover {
   background: var(--text-faint);
 }
 
+/* ─── Skip nav (a11y) ─────────────────────────────────────────────── */
+.skip-nav {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.skip-nav:focus {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  padding: 12px 24px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  width: auto;
+  height: auto;
+  overflow: visible;
+}
+
+/* ─── Skeleton loading pulse ──────────────────────────────────────── */
+@keyframes skeleton-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* ─── Loading dots ────────────────────────────────────────────────── */
 @keyframes dot-bounce {
   0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }

@@ -102,3 +102,33 @@ export const chatRequestSchema = z.object({
     content: z.any(),
   }).passthrough()).max(100, 'Too many messages (max 100)'),
 })
+
+// ─── Branding Schema ────────────────────────────────────────────────────────
+
+export const updateBrandingSchema = z.object({
+  companyName: z.string().max(200).nullish(),
+  address: z.string().max(500).nullish(),
+  phone: z.string().max(30).nullish(),
+  email: z.string().max(200).nullish(),
+  website: z.string().max(500).nullish(),
+  logoBase64: z.string().max(2_000_000).nullish(), // ~1.5MB image
+  logoMimeType: z.enum(['image/png', 'image/jpeg']).nullish(),
+  preparedByName: z.string().max(200).nullish(),
+  preparedByTitle: z.string().max(200).nullish(),
+  preparedByPhone: z.string().max(30).nullish(),
+  preparedByEmail: z.string().max(200).nullish(),
+})
+
+// ─── Chat CRUD Schema ───────────────────────────────────────────────────────
+
+export const createChatSchema = z.object({
+  title: z.string().max(200).nullish(),
+  projectId: z.string().max(100).nullish(),
+  messages: z.array(z.any()).max(100).optional().default([]),
+})
+
+// ─── Project Schema ─────────────────────────────────────────────────────────
+
+export const createProjectSchema = z.object({
+  name: z.string().min(1, 'name is required').max(200),
+})

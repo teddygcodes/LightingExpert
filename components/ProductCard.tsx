@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import Link from 'next/link'
 
 interface ProductCardProps {
@@ -25,7 +25,7 @@ function confidenceColor(score: number | null): string {
   return '#d13438'
 }
 
-export default function ProductCard({ product, thumbnailUrl }: ProductCardProps) {
+const ProductCard = memo(function ProductCard({ product, thumbnailUrl }: ProductCardProps) {
   const [imgFailed, setImgFailed] = useState(false)
   const confidence = product.overallConfidence
   const pct = confidence ? Math.round(confidence * 100) : 0
@@ -108,4 +108,6 @@ export default function ProductCard({ product, thumbnailUrl }: ProductCardProps)
       </div>
     </Link>
   )
-}
+})
+
+export default ProductCard

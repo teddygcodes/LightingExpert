@@ -208,33 +208,47 @@ export async function searchProducts(params: SearchProductsParams): Promise<Sear
       try {
         const mfgToken = tokens[0]
         const rest = tokens.slice(1).join(' ')
-        const mfgBase: Prisma.ProductWhereInput = {
-          isActive: true,
-          manufacturer: { name: { contains: mfgToken, mode: 'insensitive' } },
-          ...(where.categoryId ? { categoryId: where.categoryId } : {}),
-          ...(where.canonicalFixtureType ? { canonicalFixtureType: where.canonicalFixtureType } : {}),
-          ...(where.manufacturer ? { manufacturer: where.manufacturer as Prisma.ManufacturerWhereInput } : {}),
+
+        // Use manufacturer slug if already specified, otherwise match first token against name
+        const mfrFilter = params.manufacturerSlug
+          ? Prisma.sql`AND m.slug = ${params.manufacturerSlug}`
+          : Prisma.sql`AND m.name ILIKE '%' || ${mfgToken} || '%'`
+        const catFilter = where.categoryId && typeof where.categoryId === 'object' && 'in' in where.categoryId
+          ? Prisma.sql`AND p."categoryId" = ANY(${(where.categoryId as { in: string[] }).in}::text[])`
+          : Prisma.sql``
+        const ftFilter = where.canonicalFixtureType
+          ? Prisma.sql`AND p."canonicalFixtureType"::text = ${where.canonicalFixtureType as string}`
+          : Prisma.sql``
+
+        // Single ranked query replaces 2 sequential bucket queries
+        const ranked = await prisma.$queryRaw<{ id: string }[]>`
+          SELECT p.id FROM "Product" p
+          JOIN "Manufacturer" m ON m.id = p."manufacturerId"
+          WHERE p."isActive" = true
+            ${mfrFilter}
+            ${catFilter}
+            ${ftFilter}
+            AND (
+              p."catalogNumber" ILIKE ${rest} || '%'
+              OR p."familyName" ILIKE ${rest} || '%'
+            )
+          ORDER BY
+            CASE
+              WHEN p."catalogNumber" ILIKE ${rest} || '%' THEN 1
+              ELSE 2
+            END,
+            p."catalogNumber" ASC
+          LIMIT ${Prisma.raw(String(limit))}
+        `
+
+        if (ranked.length > 0) {
+          const ids = ranked.map((r) => r.id)
+          const products = await prisma.product.findMany({
+            where: { id: { in: ids } },
+            select: PRODUCT_SELECT,
+          })
+          return ids.map((id) => products.find((p) => p.id === id)).filter(Boolean) as SearchProductRow[]
         }
-
-        const b1 = await prisma.product.findMany({
-          where: { ...mfgBase, catalogNumber: { startsWith: rest, mode: 'insensitive' } },
-          select: PRODUCT_SELECT,
-          take: limit,
-        })
-        if (b1.length > 0) return b1
-
-        const b1Ids = new Set(b1.map((p) => p.id))
-        const b2 = await prisma.product.findMany({
-          where: {
-            ...mfgBase,
-            familyName: { startsWith: rest, mode: 'insensitive' },
-            NOT: { id: { in: [...b1Ids] } },
-          },
-          select: PRODUCT_SELECT,
-          take: limit,
-        })
-        const merged = [...b1, ...b2]
-        if (merged.length > 0) return merged
       } catch {
         // fall through to tsvector
       }

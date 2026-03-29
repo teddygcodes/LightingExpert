@@ -26,6 +26,7 @@ import { saveSpecSheet, getSpecSheetPath } from '../storage'
 import { getThumbnailPath } from '../thumbnails'
 import type { CrawlEvidence, FieldProvenanceMap } from '../types'
 import fs from 'fs'
+import { withRetryOrNull } from './retry'
 
 const SUPPORT_BASE = 'https://support.lutron.com'
 const STEALTH_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
@@ -620,7 +621,7 @@ async function extractProduct(entry: LutronCrawlEntry): Promise<LutronProduct | 
       evidence.discoveredPdfUrl = 'cached'
     } else if (primaryLink) {
       evidence.attemptedPdfUrls!.push(primaryLink.url)
-      const pdfResult = await downloadValidPdf(primaryLink.url)
+      const pdfResult = await withRetryOrNull(() => downloadValidPdf(primaryLink.url), { label: `pdf ${entry.productId}` })
       if (pdfResult) {
         specSheetPath = saveSpecSheet('lutron', entry.productId, pdfResult.buffer)
         resolvedSpecSheetUrl = pdfResult.resolvedUrl
@@ -646,7 +647,7 @@ async function extractProduct(entry: LutronCrawlEntry): Promise<LutronProduct | 
     // ── Thumbnail ────────────────────────────────────────────────────────────
     const thumbPath = getThumbnailPath('lutron', catalogNumber)
     if (thumbnailUrl && !fs.existsSync(thumbPath)) {
-      const imgBuf = await downloadImageBuffer(thumbnailUrl)
+      const imgBuf = await withRetryOrNull(() => downloadImageBuffer(thumbnailUrl), { label: `image ${catalogNumber}` })
       if (imgBuf) {
         const thumbDir = path.dirname(thumbPath)
         if (!fs.existsSync(thumbDir)) fs.mkdirSync(thumbDir, { recursive: true })

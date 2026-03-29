@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useDebounce } from '@/lib/hooks/useDebounce'
 import ProductConfigurator from './ProductConfigurator'
 
 interface Props {
@@ -36,10 +37,10 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ imported: string[]; unmatched: string[] } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Fixture add form
   const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
   const [searchResults, setSearchResults] = useState<ProductOption[]>([])
   const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null)
   const [fixtureType, setFixtureType] = useState('')
@@ -99,7 +100,7 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
     }
   }
 
-  async function searchProducts(q: string) {
+  const searchProducts = useCallback(async (q: string) => {
     setSearchError(false)
     if (q.length < 2) { setSearchResults([]); return }
     try {
@@ -110,7 +111,12 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
     } catch {
       setSearchError(true)
     }
-  }
+  }, [])
+
+  // Auto-search when debounced query changes
+  useEffect(() => {
+    if (!selectedProduct) searchProducts(debouncedSearchQuery)
+  }, [debouncedSearchQuery, selectedProduct, searchProducts])
 
   async function addFixture() {
     if (!selectedProduct || !fixtureType) return
@@ -296,11 +302,8 @@ export default function SubmittalBuilder({ submittalId, initialData, onRefresh }
               style={inputStyle}
               value={selectedProduct ? `${selectedProduct.catalogNumber} — ${selectedProduct.displayName ?? ''}` : searchQuery}
               onChange={e => {
-                const q = e.target.value
                 setSelectedProduct(null)
-                setSearchQuery(q)
-                if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
-                searchDebounceRef.current = setTimeout(() => searchProducts(q), 300)
+                setSearchQuery(e.target.value)
               }}
               placeholder="Search catalog #…"
             />

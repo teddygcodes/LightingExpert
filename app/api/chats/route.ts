@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { apiError } from '@/lib/api-response'
+import { createChatSchema, zodError } from '@/lib/validations'
 
 // GET /api/chats — list all chats (no messages, for sidebar)
 export async function GET(req: NextRequest) {
@@ -23,18 +24,22 @@ export async function GET(req: NextRequest) {
 
 // POST /api/chats — create a new chat
 export async function POST(req: NextRequest) {
-  let body: Record<string, unknown>
+  let body: unknown
   try {
     body = await req.json()
   } catch {
     return apiError('Invalid JSON in request body', 400)
   }
+
+  const parsed = createChatSchema.safeParse(body)
+  if (!parsed.success) return zodError(parsed)
+
   try {
     const chat = await prisma.chat.create({
       data: {
-        title: (body.title as string) ?? null,
-        projectId: (body.projectId as string) ?? null,
-        messages: (body.messages ?? []) as Prisma.InputJsonValue,
+        title: parsed.data.title ?? null,
+        projectId: parsed.data.projectId ?? null,
+        messages: (parsed.data.messages ?? []) as Prisma.InputJsonValue,
       },
       select: { id: true, title: true, projectId: true, createdAt: true, updatedAt: true },
     })

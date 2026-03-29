@@ -5,10 +5,7 @@ export async function GET() {
   const manufacturers = await prisma.manufacturer.findMany({
     take: 100,
     include: {
-      products: {
-        where: { isActive: true },
-        select: { id: true },
-      },
+      _count: { select: { products: { where: { isActive: true } } } },
       categories: {
         where: { parentId: null },
         orderBy: { sortOrder: 'asc' },
@@ -19,12 +16,12 @@ export async function GET() {
   })
 
   const result = manufacturers
-    .filter((m) => m.products.length > 0 || m.categories.length > 0)
+    .filter((m) => m._count.products > 0 || m.categories.length > 0)
     .map((m) => ({
       id: m.id,
       name: m.name,
       slug: m.slug,
-      productCount: m.products.length,
+      productCount: m._count.products,
       categories: m.categories,
     }))
 

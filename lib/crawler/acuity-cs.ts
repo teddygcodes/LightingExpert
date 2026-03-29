@@ -16,6 +16,7 @@ import { saveSpecSheet, getSpecSheetPath } from '../storage'
 import { getThumbnailPath } from '../thumbnails'
 import type { CrawlEvidence, FieldProvenanceMap } from '../types'
 import fs from 'fs'
+import { withRetryOrNull } from './retry'
 
 const BASE_URL = 'https://www.acuitybrands.com'
 
@@ -662,7 +663,7 @@ async function extractProductFromPage(
       evidence.discoveredPdfUrl = 'cached'
     } else if (primaryLink) {
       evidence.attemptedPdfUrls!.push(primaryLink.url)
-      const pdfResult = await downloadValidPdf(primaryLink.url, context.request)
+      const pdfResult = await withRetryOrNull(() => downloadValidPdf(primaryLink.url, context.request), { label: `pdf ${productId}` })
       if (pdfResult) {
         specSheetPath = saveSpecSheet('acuity-cs', productId, pdfResult.buffer)
         resolvedSpecSheetUrl = pdfResult.resolvedUrl
@@ -690,7 +691,7 @@ async function extractProductFromPage(
     // ── Thumbnail Image ───────────────────────────────────────────────────────
     const thumbPath = getThumbnailPath('acuity-cs', productId)
     if (pageData.heroImageUrl && !fs.existsSync(thumbPath)) {
-      const imgBuf = await downloadImageBuffer(pageData.heroImageUrl)
+      const imgBuf = await withRetryOrNull(() => downloadImageBuffer(pageData.heroImageUrl), { label: `image ${productId}` })
       if (imgBuf) {
         const thumbDir = path.dirname(thumbPath)
         if (!fs.existsSync(thumbDir)) fs.mkdirSync(thumbDir, { recursive: true })

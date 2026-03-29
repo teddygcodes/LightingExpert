@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { apiError } from '@/lib/api-response'
+import { createProjectSchema, zodError } from '@/lib/validations'
 
 export async function GET() {
   try {
@@ -20,15 +21,19 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  let body: Record<string, unknown>
+  let body: unknown
   try {
     body = await req.json()
   } catch {
     return apiError('Invalid JSON in request body', 400)
   }
+
+  const parsed = createProjectSchema.safeParse(body)
+  if (!parsed.success) return zodError(parsed)
+
   try {
     const project = await prisma.chatProject.create({
-      data: { name: (body.name as string) ?? 'New Project' },
+      data: { name: parsed.data.name },
       include: { chats: true },
     })
     return NextResponse.json(project, { status: 201 })

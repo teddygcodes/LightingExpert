@@ -78,5 +78,7 @@ export async function GET(req: NextRequest) {
     computeDescendants(root)
   }
 
-  return NextResponse.json(roots)
+  const response = NextResponse.json(roots)
+  response.headers.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+  return response
 }

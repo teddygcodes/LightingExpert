@@ -1,5 +1,7 @@
 'use client'
 
+import { memo } from 'react'
+
 export type BadgeVariant = 'fixture' | 'controls' | 'dlc' | 'dlc-premium' | 'wet' | 'energy-star' | 'status-success' | 'status-partial' | 'status-failed' | 'status-suspicious'
 
 const VARIANT_STYLES: Record<BadgeVariant, { background: string; color: string }> = {
@@ -20,7 +22,7 @@ interface SpecBadgeProps {
   variant: BadgeVariant
 }
 
-export default function SpecBadge({ label, variant }: SpecBadgeProps) {
+const SpecBadge = memo(function SpecBadge({ label, variant }: SpecBadgeProps) {
   const style = VARIANT_STYLES[variant] ?? VARIANT_STYLES.fixture
   return (
     <span
@@ -40,4 +42,6 @@ export default function SpecBadge({ label, variant }: SpecBadgeProps) {
       {label}
     </span>
   )
-}
+})
+
+export default SpecBadge

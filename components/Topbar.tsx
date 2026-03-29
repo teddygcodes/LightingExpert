@@ -1,6 +1,8 @@
 export default function Topbar() {
   return (
     <header
+      role="banner"
+      aria-label="Atlantis KB"
       style={{
         background: '#d13438',
         color: '#fff',

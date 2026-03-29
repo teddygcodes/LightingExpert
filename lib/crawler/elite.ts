@@ -13,6 +13,7 @@ import { saveSpecSheet, getSpecSheetPath } from '../storage'
 import { getThumbnailPath } from '../thumbnails'
 import type { CrawlEvidence } from '../types'
 import fs from 'fs'
+import { withRetryOrNull } from './retry'
 
 const BASE_URL = 'https://iuseelite.com'
 const SITEMAP_URL = 'https://iuseelite.com/sitemap.xml'
@@ -509,7 +510,7 @@ async function extractProductFromPage(
       // Try each candidate in priority order; first valid %PDF wins
       for (const candidateUrl of allCandidates) {
         evidence.attemptedPdfUrls!.push(candidateUrl)
-        pdfResult = await downloadValidPdf(candidateUrl)
+        pdfResult = await withRetryOrNull(() => downloadValidPdf(candidateUrl), { label: `pdf ${candidate}` })
         if (pdfResult) {
           evidence.discoveredPdfUrl = candidateUrl
           evidence.pdfDownloadSuccess = true
@@ -536,7 +537,7 @@ async function extractProductFromPage(
     const thumbPath = getThumbnailPath('elite', catalogNumber)
     if (productImgUrl && !fs.existsSync(thumbPath)) {
       const fullImgUrl = productImgUrl.startsWith('http') ? productImgUrl : `${BASE_URL}${productImgUrl}`
-      const imgBuf = await downloadImageBuffer(fullImgUrl)
+      const imgBuf = await withRetryOrNull(() => downloadImageBuffer(fullImgUrl), { label: `image ${catalogNumber}` })
       if (imgBuf) {
         const thumbDir = path.dirname(thumbPath)
         if (!fs.existsSync(thumbDir)) fs.mkdirSync(thumbDir, { recursive: true })

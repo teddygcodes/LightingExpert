@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { apiError } from '@/lib/api-response'
+import { updateBrandingSchema, zodError } from '@/lib/validations'
 
 export async function GET() {
   const branding = await prisma.companyBranding.findFirst()
@@ -7,15 +9,20 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
-  const body = await req.json()
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return apiError('Invalid JSON in request body', 400)
+  }
+
+  const parsed = updateBrandingSchema.safeParse(body)
+  if (!parsed.success) return zodError(parsed)
+
   const {
     companyName, address, phone, email, website, logoBase64, logoMimeType,
     preparedByName, preparedByTitle, preparedByPhone, preparedByEmail,
-  } = body
-
-  if (logoMimeType && !['image/png', 'image/jpeg'].includes(logoMimeType)) {
-    return NextResponse.json({ error: 'Invalid logo type' }, { status: 400 })
-  }
+  } = parsed.data
 
   const existing = await prisma.companyBranding.findFirst()
 

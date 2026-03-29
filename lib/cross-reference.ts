@@ -5,6 +5,57 @@ import type { HardRejectReason, CrossRefMatch, CrossRefReject, ComparisonSnapsho
 
 const CLAUDE_FAST_MODEL = process.env.CLAUDE_FAST_MODEL ?? 'claude-haiku-4-5-20251001'
 
+// ─── Configurable Scoring Weights ────────────────────────────────────────────
+
+export interface CrossReferenceConfig {
+  weights: {
+    formFactor: number
+    lumens: number
+    cri: number
+    cct: number
+    wattage: number
+    dimming: number
+    dlc: number
+    dimensions: number
+    ipRating: number
+  }
+  /** Score given to unknown/missing fields (0-1 scale of partial weight) */
+  unknownFieldRatio: number
+  matchThresholds: {
+    directReplacement: number
+    functionalEquivalent: number
+    upgrade: number
+  }
+  penalties: {
+    wetLocation: number
+    nemaRating: number
+  }
+}
+
+export const DEFAULT_CROSS_REF_CONFIG: CrossReferenceConfig = {
+  weights: {
+    formFactor: 0.20,
+    lumens: 0.20,
+    cri: 0.10,
+    cct: 0.10,
+    wattage: 0.05,
+    dimming: 0.10,
+    dlc: 0.10,
+    dimensions: 0.05,
+    ipRating: 0.10,
+  },
+  unknownFieldRatio: 0.50,
+  matchThresholds: {
+    directReplacement: 0.90,
+    functionalEquivalent: 0.75,
+    upgrade: 0.60,
+  },
+  penalties: {
+    wetLocation: 0.05,
+    nemaRating: 0.04,
+  },
+}
+
 // Voltage compatibility — UNIVERSAL is compatible with everything
 function voltagesCompatible(a: string | null, b: string | null): boolean {
   if (!a || !b) return true
@@ -142,20 +193,21 @@ interface ScoreResult {
   reasons: string[]
 }
 
-function scoreMatch(source: Product, target: Product): ScoreResult {
+function scoreMatch(source: Product, target: Product, cfg: CrossReferenceConfig = DEFAULT_CROSS_REF_CONFIG): ScoreResult {
   let score = 0
   const reasons: string[] = []
+  const w = cfg.weights
 
-  // Form factor match (weight 0.20)
+  // Form factor match
   if (source.formFactor && target.formFactor) {
     if (source.formFactor === target.formFactor) {
-      score += 0.20
+      score += w.formFactor
       reasons.push('Form factor matches')
     } else {
       reasons.push(`Form factor differs (${source.formFactor} vs ${target.formFactor})`)
     }
   } else {
-    score += 0.10 // partial credit when unknown
+    score += w.formFactor * cfg.unknownFieldRatio
   }
 
   // Lumens within range (weight 0.20)
@@ -164,7 +216,7 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
     target.lumens, target.lumensMin, target.lumensMax,
     0.10
   )
-  score += lumensScore * 0.20
+  score += lumensScore * w.lumens
   {
     const sLumStr = (source.lumensMin != null && source.lumensMax != null)
       ? `${source.lumensMin.toLocaleString()}–${source.lumensMax.toLocaleString()} lm`
@@ -179,23 +231,23 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
     else reasons.push(lumLabel ? `Lumens no overlap: ${lumLabel}` : 'Lumen output does not overlap')
   }
 
-  // CRI match (weight 0.10)
+  // CRI match
   if (source.cri && target.cri) {
     if (source.cri === target.cri) {
-      score += 0.10
+      score += w.cri
       reasons.push(`CRI matches (${source.cri})`)
     } else if (target.cri > source.cri) {
-      score += 0.08
+      score += w.cri * 0.8
       reasons.push(`Target CRI (${target.cri}) exceeds source (${source.cri})`)
     } else {
-      score += 0.03
+      score += w.cri * 0.3
       reasons.push(`Target CRI (${target.cri}) is lower than source (${source.cri})`)
     }
   } else {
-    score += 0.05
+    score += w.cri * cfg.unknownFieldRatio
   }
 
-  // CCT overlap (weight 0.10)
+  // CCT overlap
   if (source.cctOptions.length > 0 && target.cctOptions.length > 0) {
     const overlap = source.cctOptions.filter((c) => target.cctOptions.includes(c))
     const pctOverlap = overlap.length / source.cctOptions.length
@@ -203,25 +255,25 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
     const sTgt = target.cctOptions.map(c => `${c}K`).join('/')
     const sOver = overlap.map(c => `${c}K`).join('/')
     if (pctOverlap >= 1.0) {
-      score += 0.10
+      score += w.cct
       reasons.push(`CCT full match: ${sSrc}`)
     } else if (pctOverlap >= 0.5) {
-      score += 0.05
+      score += w.cct * 0.5
       reasons.push(`CCT partial: source ${sSrc}, target ${sTgt} (shared: ${sOver})`)
     } else {
       reasons.push(`CCT limited overlap: source ${sSrc}, target ${sTgt}`)
     }
   } else {
-    score += 0.05
+    score += w.cct * cfg.unknownFieldRatio
   }
 
-  // Wattage within range (weight 0.05)
+  // Wattage within range
   const wattScore = rangeOverlapScore(
     source.wattage, source.wattageMin, source.wattageMax,
     target.wattage, target.wattageMin, target.wattageMax,
     0.15
   )
-  score += wattScore * 0.05
+  score += wattScore * w.wattage
   if (wattScore < 0.5) {
     const sWStr = (source.wattageMin != null && source.wattageMax != null)
       ? `${source.wattageMin}–${source.wattageMax}W`
@@ -232,92 +284,91 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
     reasons.push(sWStr && tWStr ? `Wattage differs: target ${tWStr} vs source ${sWStr}` : 'Wattage differs significantly')
   }
 
-  // Dimming compatibility (weight 0.10)
+  // Dimming compatibility
   if (source.dimmable === true && target.dimmable === true) {
     const srcTypes = source.dimmingType
     const tgtTypes = target.dimmingType
     if (srcTypes.length > 0 && tgtTypes.length > 0) {
       const overlap = srcTypes.filter((d) => tgtTypes.includes(d))
       if (overlap.length > 0) {
-        score += 0.10
+        score += w.dimming
         reasons.push(`Dimming protocol matches (${overlap.join(', ')})`)
       } else {
-        score += 0.07
+        score += w.dimming * 0.7
         reasons.push(`Source: ${srcTypes.join('/')} dimming; Target: ${tgtTypes.join('/')} — verify control system compatibility`)
       }
     } else {
-      score += 0.07
+      score += w.dimming * 0.7
       reasons.push('Both dimmable')
     }
   } else if (source.dimmable !== true && target.dimmable !== true) {
-    score += 0.10
+    score += w.dimming
     reasons.push('Neither requires dimming')
   } else if (source.dimmable === true) {
     reasons.push('Source is dimmable but target is not')
   }
 
-  // DLC match (weight 0.10)
+  // DLC match
   if (source.dlcListed && target.dlcListed) {
     if (source.dlcPremium && target.dlcPremium) {
-      score += 0.10
+      score += w.dlc
       reasons.push('Both DLC Premium listed')
     } else {
-      score += 0.10
+      score += w.dlc
       reasons.push('Both DLC listed')
     }
   } else if (!source.dlcListed && !target.dlcListed) {
-    score += 0.07
+    score += w.dlc * 0.7
   } else {
-    score += 0.03
+    score += w.dlc * 0.3
     reasons.push('DLC listing mismatch')
   }
 
-  // Physical dimensions (weight 0.05)
+  // Physical dimensions
   if (source.dimensions && target.dimensions) {
     if (source.dimensions === target.dimensions) {
-      score += 0.05
+      score += w.dimensions
       reasons.push('Dimensions match exactly')
     } else {
-      // Simple string similarity
       const sDims = source.dimensions.replace(/[^\d.]/g, ' ').trim().split(/\s+/).map(Number).filter(Boolean).sort()
       const tDims = target.dimensions.replace(/[^\d.]/g, ' ').trim().split(/\s+/).map(Number).filter(Boolean).sort()
       const allClose = sDims.length > 0 &&
         sDims.length === tDims.length &&
         sDims.every((d, i) => d > 0 && tDims[i] > 0 && Math.abs(d - tDims[i]) / d < 0.1)
       if (allClose) {
-        score += 0.04
+        score += w.dimensions * 0.8
         reasons.push('Dimensions are very close')
       } else {
-        score += 0.02
+        score += w.dimensions * 0.4
       }
     }
   } else {
-    score += 0.025
+    score += w.dimensions * cfg.unknownFieldRatio
   }
 
-  // IP/NEMA rating (weight 0.10)
+  // IP/NEMA rating
   if (source.ipRating && target.ipRating) {
     if (source.ipRating === target.ipRating) {
-      score += 0.10
+      score += w.ipRating
     } else {
-      score += 0.05
+      score += w.ipRating * 0.5
       reasons.push('IP ratings differ')
     }
   } else if (!source.ipRating && !target.ipRating) {
-    score += 0.07
+    score += w.ipRating * 0.7
   } else {
-    score += 0.05
+    score += w.ipRating * 0.5
   }
 
   // Wet location downgrade (soft penalty — not a hard reject)
   if (source.wetLocation === true && target.wetLocation !== true) {
-    score -= 0.05
+    score -= cfg.penalties.wetLocation
     reasons.push('Source is wet-rated; target is not — verify installation environment')
   }
 
   // NEMA rating downgrade (soft penalty — not a hard reject)
   if (source.nemaRating && !target.nemaRating) {
-    score -= 0.04
+    score -= cfg.penalties.nemaRating
     reasons.push(`Source has NEMA ${source.nemaRating} rating; target unrated — confirm environment requirements`)
   }
 
@@ -326,10 +377,11 @@ function scoreMatch(source: Product, target: Product): ScoreResult {
 
 // ─── Match Type Determination ─────────────────────────────────────────────────
 
-function determineMatchType(score: number, source: Product, target: Product): MatchType {
-  if (score >= 0.90) return MatchType.DIRECT_REPLACEMENT
-  if (score >= 0.75) return MatchType.FUNCTIONAL_EQUIVALENT
-  if (score >= 0.60) {
+function determineMatchType(score: number, source: Product, target: Product, cfg: CrossReferenceConfig = DEFAULT_CROSS_REF_CONFIG): MatchType {
+  const t = cfg.matchThresholds
+  if (score >= t.directReplacement) return MatchType.DIRECT_REPLACEMENT
+  if (score >= t.functionalEquivalent) return MatchType.FUNCTIONAL_EQUIVALENT
+  if (score >= t.upgrade) {
     // Check if target is an upgrade
     const targetLumens = target.lumens ?? target.lumensMax ?? 0
     const sourceLumens = source.lumens ?? source.lumensMax ?? 0

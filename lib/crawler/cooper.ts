@@ -10,6 +10,7 @@ import { saveSpecSheet, getSpecSheetPath } from '../storage'
 import { getThumbnailPath } from '../thumbnails'
 import type { CrawlEvidence, FieldProvenanceMap } from '../types'
 import fs from 'fs'
+import { withRetryOrNull } from './retry'
 
 const BASE_URL = 'https://www.cooperlighting.com'
 const STEALTH_UA =
@@ -567,7 +568,7 @@ async function extractProductFromPage(
       evidence.discoveredPdfUrl = 'cached'
     } else if (primaryLink) {
       evidence.attemptedPdfUrls!.push(primaryLink.url)
-      const pdfResult = await downloadValidPdf(primaryLink.url)
+      const pdfResult = await withRetryOrNull(() => downloadValidPdf(primaryLink.url), { label: `pdf ${catalogNumber}` })
       if (pdfResult) {
         specSheetPath = saveSpecSheet('cooper', catalogNumber, pdfResult.buffer)
         resolvedSpecSheetUrl = pdfResult.resolvedUrl
@@ -596,7 +597,7 @@ async function extractProductFromPage(
     const thumbPath = getThumbnailPath('cooper', catalogNumber)
     const thumbSrc = entry.thumbnailUrl || pageData.heroImageUrl
     if (thumbSrc && !fs.existsSync(thumbPath)) {
-      const imgBuf = await downloadImageBuffer(thumbSrc)
+      const imgBuf = await withRetryOrNull(() => downloadImageBuffer(thumbSrc), { label: `image ${catalogNumber}` })
       if (imgBuf) {
         const thumbDir = path.dirname(thumbPath)
         if (!fs.existsSync(thumbDir)) fs.mkdirSync(thumbDir, { recursive: true })

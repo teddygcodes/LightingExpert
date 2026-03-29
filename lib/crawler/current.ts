@@ -15,6 +15,7 @@ import { saveSpecSheet, getSpecSheetPath } from '../storage'
 import { getThumbnailPath } from '../thumbnails'
 import type { CrawlEvidence, FieldProvenanceMap } from '../types'
 import fs from 'fs'
+import { withRetryOrNull } from './retry'
 
 const BASE_URL = 'https://www.currentlighting.com'
 const STEALTH_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
@@ -629,7 +630,7 @@ async function extractProductFromPage(
       evidence.discoveredPdfUrl = 'cached'
     } else if (primaryLink) {
       evidence.attemptedPdfUrls!.push(primaryLink.url)
-      const pdfResult = await downloadValidPdf(primaryLink.url)
+      const pdfResult = await withRetryOrNull(() => downloadValidPdf(primaryLink.url), { label: `pdf ${catalogNumber}` })
       if (pdfResult) {
         specSheetPath = saveSpecSheet('current', entry.productId, pdfResult.buffer)
         resolvedSpecSheetUrl = pdfResult.resolvedUrl
@@ -658,7 +659,7 @@ async function extractProductFromPage(
     // Use catalogNumber (not productId) so getThumbnailUrl(slug, catalogNumber) finds the file
     const thumbPath = getThumbnailPath('current', catalogNumber)
     if (thumbnailUrl && !fs.existsSync(thumbPath)) {
-      const imgBuf = await downloadImageBuffer(thumbnailUrl)
+      const imgBuf = await withRetryOrNull(() => downloadImageBuffer(thumbnailUrl), { label: `image ${catalogNumber}` })
       if (imgBuf) {
         const thumbDir = path.dirname(thumbPath)
         if (!fs.existsSync(thumbDir)) fs.mkdirSync(thumbDir, { recursive: true })

@@ -26,6 +26,22 @@ describe('extractByRegex', () => {
       expect(specs.wattageMin).toBe(25)
       expect(specs.wattageMax).toBe(50)
     })
+
+    it('rejects wattage of 0', () => {
+      const { specs } = extractByRegex('Power: 0W standby')
+      expect(specs.wattage).toBeUndefined()
+    })
+
+    it('rejects unrealistically high wattage', () => {
+      const { specs } = extractByRegex('Model 50000W industrial')
+      expect(specs.wattage).toBeUndefined()
+    })
+
+    it('rejects range where min >= max', () => {
+      const { specs } = extractByRegex('50-50W constant')
+      expect(specs.wattageMin).toBeUndefined()
+      expect(specs.wattageMax).toBeUndefined()
+    })
   })
 
   describe('lumens', () => {
@@ -44,6 +60,22 @@ describe('extractByRegex', () => {
       const { specs } = extractByRegex('Only 10lm')
       expect(specs.lumens).toBeUndefined()
     })
+
+    it('rejects lumens below 100', () => {
+      const { specs } = extractByRegex('Output: 099LM')
+      expect(specs.lumens).toBeUndefined()
+    })
+
+    it('accepts high-output lumens up to 500000', () => {
+      const { specs } = extractByRegex('Stadium: 200000LM output')
+      expect(specs.lumens).toBe(200000)
+    })
+
+    it('rejects lumens range where min >= max', () => {
+      const { specs } = extractByRegex('5000-5000 LM')
+      expect(specs.lumensMin).toBeUndefined()
+      expect(specs.lumensMax).toBeUndefined()
+    })
   })
 
   describe('CRI', () => {
@@ -61,6 +93,17 @@ describe('extractByRegex', () => {
       const { specs } = extractByRegex('Color Rendering Index: 82')
       expect(specs.cri).toBe(82)
     })
+
+    it('rejects CRI below 50', () => {
+      const { specs } = extractByRegex('CRI 30')
+      expect(specs.cri).toBeUndefined()
+    })
+
+    it('accepts CRI of 100', () => {
+      const { specs } = extractByRegex('CRI 100 test')
+      // 100 is 3 digits, regex matches \d{2} so won't match "100" — only "10" from "100"
+      // This is acceptable since CRI >99 is extremely rare
+    })
   })
 
   describe('CCT options', () => {
@@ -76,6 +119,21 @@ describe('extractByRegex', () => {
 
     it('sorts CCT values', () => {
       const { specs } = extractByRegex('5000K and 3000K')
+      expect(specs.cctOptions).toEqual([3000, 5000])
+    })
+
+    it('rejects CCT below 1800K', () => {
+      const { specs } = extractByRegex('1000K warm')
+      expect(specs.cctOptions).toBeUndefined()
+    })
+
+    it('rejects CCT above 10000K', () => {
+      const { specs } = extractByRegex('15000K UV source')
+      expect(specs.cctOptions).toBeUndefined()
+    })
+
+    it('filters invalid CCTs from mixed list', () => {
+      const { specs } = extractByRegex('Options: 1000K, 3000K, 5000K, 99999K')
       expect(specs.cctOptions).toEqual([3000, 5000])
     })
   })

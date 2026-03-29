@@ -1,20 +1,7 @@
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import { DeleteSubmittalButton } from '@/components/DeleteSubmittalButton'
-
-const STATUS_COLOR: Record<string, string> = {
-  DRAFT: '#6b6b6b',
-  GENERATED: '#0078d4',
-  SUBMITTED: '#0078d4',
-  APPROVED: '#107c10',
-  APPROVED_AS_NOTED: '#107c10',
-  REVISE_RESUBMIT: '#ff8c00',
-  REJECTED: '#d13438',
-  FINAL: '#107c10',
-  ISSUED_FOR_REVIEW: '#0078d4',
-  ISSUED_FOR_CONSTRUCTION: '#107c10',
-  SUPERSEDED: '#d13438',
-}
+import { SUBMITTAL_STATUS_COLOR, COLORS } from '@/lib/design-tokens'
 
 export default async function SubmittalsPage() {
   const submittals = await prisma.submittal.findMany({
@@ -29,7 +16,7 @@ export default async function SubmittalsPage() {
         <Link
           href="/submittals/new"
           style={{
-            background: '#d13438',
+            background: COLORS.accent,
             color: '#fff',
             padding: '8px 18px',
             fontSize: 13,
@@ -42,12 +29,12 @@ export default async function SubmittalsPage() {
       </div>
 
       {submittals.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b6b6b' }}>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: COLORS.textMuted }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>No submittals yet</div>
           <div style={{ fontSize: 13, marginBottom: 20 }}>Create a submittal package to generate PDF documents for your lighting project.</div>
           <Link
             href="/submittals/new"
-            style={{ color: '#d13438', textDecoration: 'none', fontWeight: 600 }}
+            style={{ color: COLORS.accent, textDecoration: 'none', fontWeight: 600 }}
           >
             Create your first submittal →
           </Link>
@@ -55,7 +42,7 @@ export default async function SubmittalsPage() {
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
-            <tr style={{ background: '#1a1a1a', color: '#fff' }}>
+            <tr style={{ background: COLORS.text, color: '#fff' }}>
               <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Project Name</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Project #</th>
               <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Revision</th>
@@ -70,11 +57,11 @@ export default async function SubmittalsPage() {
             {submittals.map((s, i) => (
               <tr key={s.id} style={{ background: i % 2 === 0 ? '#f9f9f9' : '#fff', borderBottom: '1px solid #e0e0e0' }}>
                 <td style={{ padding: '8px 12px' }}>
-                  <Link href={`/submittals/${s.id}`} style={{ color: '#d13438', textDecoration: 'none', fontWeight: 600 }}>
+                  <Link href={`/submittals/${s.id}`} style={{ color: COLORS.accent, textDecoration: 'none', fontWeight: 600 }}>
                     {s.projectName}
                   </Link>
                 </td>
-                <td style={{ padding: '8px 12px', color: '#6b6b6b' }}>{s.projectNumber ?? '—'}</td>
+                <td style={{ padding: '8px 12px', color: COLORS.textMuted }}>{s.projectNumber ?? '—'}</td>
                 <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: 12 }}>{s.revision ?? 'Rev 0'}</td>
                 <td style={{ padding: '8px 12px' }}>
                   <span style={{
@@ -82,19 +69,19 @@ export default async function SubmittalsPage() {
                     padding: '2px 8px',
                     fontSize: 11,
                     fontWeight: 600,
-                    background: STATUS_COLOR[s.status] || '#6b6b6b',
+                    background: SUBMITTAL_STATUS_COLOR[s.status] || COLORS.textMuted,
                     color: '#fff',
                   }}>
                     {s.status.replace(/_/g, ' ')}
                   </span>
                 </td>
                 <td style={{ padding: '8px 12px', textAlign: 'center' }}>{s._count.items}</td>
-                <td style={{ padding: '8px 12px', color: '#6b6b6b', fontSize: 12 }}>
+                <td style={{ padding: '8px 12px', color: COLORS.textMuted, fontSize: 12 }}>
                   {new Date(s.updatedAt).toLocaleDateString()}
                 </td>
                 <td style={{ padding: '8px 12px' }}>
                   {s.pdfUrl ? (
-                    <a href={s.pdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0078d4', fontSize: 12 }}>
+                    <a href={s.pdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: COLORS.blue, fontSize: 12 }}>
                       Download ↗
                     </a>
                   ) : (
