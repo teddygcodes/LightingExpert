@@ -1,8 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import type { ProductSearchResult } from '@/lib/agent/types'
 import SpecSheetPreview from './SpecSheetPreview'
+
+const AddToSubmittalDialog = dynamic(() => import('./AddToSubmittalDialog'), { ssr: false })
 
 interface Props {
   product: ProductSearchResult
@@ -11,6 +14,8 @@ interface Props {
 
 export default function ProductInlineCard({ product, onAddToSubmittal }: Props) {
   const [showSpec, setShowSpec] = useState(false)
+  const [showDialog, setShowDialog] = useState(false)
+  const [addedMsg, setAddedMsg] = useState<string | null>(null)
 
   const lumensDisplay =
     product.lumens != null
@@ -37,6 +42,7 @@ export default function ProductInlineCard({ product, onAddToSubmittal }: Props) 
       : null
 
   return (
+    <>
     <div
       className="product-card"
       style={{
@@ -133,6 +139,22 @@ export default function ProductInlineCard({ product, onAddToSubmittal }: Props) 
             )}
           </div>
 
+          {/* Added confirmation */}
+          {addedMsg && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              marginTop: 8, fontSize: 12,
+              color: '#15803d', background: '#f0fdf4',
+              border: '1px solid #bbf7d0', borderLeft: '3px solid #15803d',
+              padding: '4px 10px',
+            }}>
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                <path d="M1.5 5.5l2.5 2.5L9.5 2" stroke="#15803d" strokeWidth="1.8" strokeLinecap="square"/>
+              </svg>
+              {addedMsg}
+            </div>
+          )}
+
           {/* Actions */}
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button
@@ -152,7 +174,7 @@ export default function ProductInlineCard({ product, onAddToSubmittal }: Props) 
             </button>
             {onAddToSubmittal && (
               <button
-                onClick={() => onAddToSubmittal(product.catalogNumber)}
+                onClick={() => setShowDialog(true)}
                 style={{
                   fontSize: 12,
                   padding: '4px 11px',
@@ -183,5 +205,19 @@ export default function ProductInlineCard({ product, onAddToSubmittal }: Props) 
         </div>
       )}
     </div>
+
+    {/* Add-to-submittal dialog — portalled to document.body to escape transforms */}
+    {showDialog && (
+      <AddToSubmittalDialog
+        product={product}
+        onClose={() => setShowDialog(false)}
+        onAdded={(name) => {
+          setShowDialog(false)
+          setAddedMsg(`Added to ${name}`)
+          setTimeout(() => setAddedMsg(null), 4000)
+        }}
+      />
+    )}
+  </>
   )
 }

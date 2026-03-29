@@ -42,6 +42,8 @@ export type CrossReferenceToolResult = {
     matchType: string
     matchReason: string
     importantDifferences: string[]
+    specSheetPath: string | null
+    specSheets: unknown
   }>
   fallbackAlternatives: SearchProductRow[]
   fallbackUsed: boolean

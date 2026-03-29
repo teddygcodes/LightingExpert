@@ -202,9 +202,10 @@ interface Props {
   currentOverride?: string | null
   onCatalogBuilt: (catalogString: string, isComplete: boolean) => void
   onClose: () => void
+  onNotFound?: () => void
 }
 
-export default function ProductConfigurator({ productId, currentOverride, onCatalogBuilt, onClose }: Props) {
+export default function ProductConfigurator({ productId, currentOverride, onCatalogBuilt, onClose, onNotFound }: Props) {
   const [matrix, setMatrix] = useState<OrderingMatrixData | null>(null)
   const [loading, setLoading] = useState(true)
   const [columnSelections, setColumnSelections] = useState<Record<string, string>>({})
@@ -223,7 +224,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
         return r.json()
       })
       .then(data => {
-        if (!data.hasMatrix) { setLoading(false); onClose(); return }
+        if (!data.hasMatrix) { setLoading(false); if (onNotFound) onNotFound(); else onClose(); return }
         const m = data.matrix as OrderingMatrixData
         setMatrix(m)
 

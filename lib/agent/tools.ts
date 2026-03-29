@@ -1,51 +1,51 @@
 // lib/agent/tools.ts
 // All 5 chat agent tools: search_products, cross_reference, get_spec_sheet, add_to_submittal, recommend_fixtures.
 
+import Anthropic from '@anthropic-ai/sdk'
 import { tool } from 'ai'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { searchProducts } from '@/lib/products-search'
 import { findMatches } from '@/lib/cross-reference'
 import type { ComparisonSnapshot } from '@/lib/types'
-import { buildRecommendationContext, rankCandidates, ClassMatchResult, inferFixtureClass } from '@/lib/agent/recommend'
+import { buildRecommendationContext, ClassMatchResult, inferFixtureClass } from '@/lib/agent/recommend'
+
+const anthropic = new Anthropic()
 
 // ─── Helper: derive human-readable differences from comparisonSnapshot ─────────
+
+// Extract the trailing percentage from a formatted delta string like "14–35W vs 29.3–51W (-31%)"
+function extractPct(deltaStr: string): number | null {
+  const m = deltaStr.match(/\(([+-]?\d+)%\)/)
+  return m ? parseInt(m[1], 10) : null
+}
 
 function deriveImportantDifferences(snapshot: ComparisonSnapshot, matchReason: string): string[] {
   const diffs: string[] = []
   const { deltas } = snapshot
 
   if (deltas.lumens) {
-    const pct = parseFloat(deltas.lumens)
-    if (!isNaN(pct) && Math.abs(pct) > 5) {
-      diffs.push(`Lumens ${pct > 0 ? 'higher' : 'lower'} (${deltas.lumens} vs source)`)
+    const pct = extractPct(deltas.lumens)
+    if (pct !== null && Math.abs(pct) > 5) {
+      diffs.push(`Lumens ${pct > 0 ? 'higher' : 'lower'} (${deltas.lumens})`)
     }
   }
   if (deltas.wattage) {
-    const pct = parseFloat(deltas.wattage)
-    if (!isNaN(pct) && Math.abs(pct) > 10) {
+    const pct = extractPct(deltas.wattage)
+    if (pct !== null && Math.abs(pct) > 10) {
       diffs.push(`Wattage ${pct > 0 ? 'higher' : 'lower'} (${deltas.wattage})`)
     }
   }
-  if (deltas.cri && deltas.cri !== 'Match') {
+  if (deltas.cri && !deltas.cri.includes('match')) {
     diffs.push(`CRI: ${deltas.cri}`)
   }
-  if (deltas.cctOptions && deltas.cctOptions !== 'Full match') {
+  // Always surface CCT differences — missing CCT options are a real substitution risk
+  if (deltas.cctOptions && !deltas.cctOptions.startsWith('Full match')) {
     diffs.push(`CCT: ${deltas.cctOptions}`)
   }
-
-  for (const r of matchReason.split('; ')) {
-    const low = r.toLowerCase()
-    if (
-      low.includes('mismatch') ||
-      low.includes('differ') ||
-      low.includes('not') ||
-      low.includes('lower') ||
-      low.includes('but') ||
-      low.includes('without')
-    ) {
-      if (!diffs.includes(r)) diffs.push(r)
-    }
+  // Always surface dimming protocol mismatches — wrong protocol is a jobsite mistake
+  if (deltas.dimming) {
+    diffs.push(`Dimming: ${deltas.dimming}`)
   }
 
   return diffs.length > 0 ? diffs : ['No significant differences identified']
@@ -77,12 +77,13 @@ async function nextFixtureType(submittalId: string): Promise<string> {
 
 const searchProductsSchema = z.object({
   query: z.string().optional().describe(
-    "Free text search: catalog number, product family, description, or application. Examples: 'CPX', '2x4 troffer', 'wall pack wet location', 'elite downlight'. Optional if structured filters are provided."
+    "Product family name or catalog number prefix ONLY. Do NOT put fixture types (use fixtureType), manufacturer names (use manufacturer), wattage (use maxWattage), or 'contractor select' (use categorySlug: 'contractor-select') here. Examples: 'CPX', 'CPHB', 'ORHB'. Omit entirely if structured filters are sufficient."
   ),
   manufacturer: z.enum(['acuity', 'cooper', 'elite', 'current', 'lutron']).optional()
     .describe('Filter to a specific manufacturer slug.'),
   categorySlug: z.string().optional().describe(
-    "Category slug. Examples: 'troffers-panels', 'downlights', 'high-bay', 'wall-pack', 'flood', 'strip', 'linear', 'area-site', 'exit-emergency', 'track-lighting', 'architectural', 'cylinders', 'surface-mount', 'pendant', 'wraps', 'bollards', 'landscape', 'bay-lighting', 'panels', 'retrofit-kits', 'step-lights', 'linear-slot', 'decorative', 'sensors', 'dimmers-switches'."
+    "Category slug filter. For Acuity Contractor Select use 'contractor-select' (automatically covers all CS sub-categories). " +
+    "General slugs: 'troffers-panels', 'downlights', 'high-bay', 'wall-pack', 'flood', 'strip', 'linear', 'area-site', 'exit-emergency', 'track-lighting', 'architectural', 'cylinders', 'surface-mount', 'pendant', 'wraps', 'bollards', 'landscape', 'bay-lighting', 'panels', 'retrofit-kits', 'step-lights', 'linear-slot', 'decorative', 'sensors', 'dimmers-switches'."
   ),
   minLumens: z.number().optional().describe('Minimum lumen output'),
   maxWattage: z.number().optional().describe('Maximum wattage'),
@@ -155,10 +156,12 @@ const recommendFixturesSchema = z.object({
   minCri: z.number().optional(),
   dlcRequired: z.boolean().optional().describe('If true, only DLC-listed products are considered'),
   wetLocation: z.boolean().optional(),
+  voltage: z.enum(['V120', 'V277', 'V120_277', 'V347', 'V347_480', 'V480', 'UNIVERSAL']).optional()
+    .describe('Required voltage. Pass when user states voltage (e.g. "277V" → V277, "480V" → V480, "120-277V" → V120_277). Critical for industrial/manufacturing where 480V is common.'),
   manufacturerSlug: z.string().optional()
     .describe('Filter to a specific manufacturer by slug (e.g. "acuity", "elite"). Also disables cross-manufacturer diversity logic — use when the user explicitly names a brand.'),
   query: z.string().optional()
-    .describe('Form factor or size token (e.g. "2x4", "2x2", "1x4"). Pass this when the user specifies a physical size so only that form factor is considered. Do NOT pass general text here — use fixtureType for fixture class.'),
+    .describe('Form factor or shape token. Pass when the user specifies a physical size OR shape. Grid sizes: "2x4", "2x2", "1x4". Shape descriptors: "round" or "ufo" for circular/UFO-style fixtures, "linear" for strip/linear fixtures. Examples: query="round" for round high bays, query="2x4" for 2x4 troffers. Do NOT pass general text — only form factor / shape tokens.'),
   limit: z.number().min(1).max(3).optional().describe('Top N results to return. Default 3, max 3.'),
 })
 
@@ -246,6 +249,14 @@ export const crossReferenceTool = tool({
 
       const { matches, rejects, filterLevel } = await findMatches(source.id, targetManufacturer)
 
+      // Batch-fetch specSheetPath + specSheets for all match products in one query
+      const matchIds = matches.slice(0, 5).map(m => m.productId)
+      const specData = await prisma.product.findMany({
+        where: { id: { in: matchIds } },
+        select: { id: true, specSheetPath: true, specSheets: true },
+      })
+      const specMap = new Map(specData.map(p => [p.id, p]))
+
       const top5 = matches.slice(0, 5).map((m) => ({
         catalogNumber: m.catalogNumber,
         displayName: m.displayName,
@@ -254,6 +265,8 @@ export const crossReferenceTool = tool({
         matchType: m.matchType,
         matchReason: m.matchReason,
         importantDifferences: deriveImportantDifferences(m.comparisonSnapshot, m.matchReason),
+        specSheetPath: specMap.get(m.productId)?.specSheetPath ?? null,
+        specSheets: specMap.get(m.productId)?.specSheets ?? [],
       }))
 
       // ── Fallback: if no exact matches, auto-search the target manufacturer
@@ -486,6 +499,7 @@ export const recommendFixturesTool = tool({
         maxWattage: params.maxWattage,
         preferredCct: params.preferredCct,
         minCri: params.minCri,
+        voltage: params.voltage,
       })
 
       // Focused candidate search — fixture type, DLC preference, CRI tolerance
@@ -495,6 +509,7 @@ export const recommendFixturesTool = tool({
         dlcListed: params.dlcRequired === true ? true : undefined,
         wetLocation: params.wetLocation,
         maxWattage: ctx.maxWattage,
+        voltage: params.voltage,
         manufacturerSlug: params.manufacturerSlug,
         query: params.query,
         limit: 50,
@@ -525,6 +540,22 @@ export const recommendFixturesTool = tool({
         }
       }
 
+      // ── Data-quality gate: filter out products with implausibly low efficacy ──
+      // Protects against extraction errors (e.g. 160 lm at 85W = 1.9 lm/W).
+      // Only applied when both lumens and wattage data are present.
+      const MIN_EFFICACY_BY_TYPE: Record<string, number> = {
+        HIGH_BAY: 80, LOW_BAY: 80, TROFFER: 60, FLAT_PANEL: 60,
+        DOWNLIGHT: 50, RECESSED_CAN: 50, VAPOR_TIGHT: 70,
+        WALL_PACK: 60, AREA_SITE: 70, CANOPY: 70,
+      }
+      const minEfficacy = MIN_EFFICACY_BY_TYPE[params.fixtureType ?? ''] ?? 30
+      candidates = candidates.filter(p => {
+        const lumens = p.lumens ?? p.lumensMax ?? p.lumensMin
+        const watts = p.wattage ?? p.wattageMax
+        if (!lumens || !watts || watts === 0) return true  // unknown data — keep, scored with confidence penalty
+        return (lumens / watts) >= minEfficacy
+      })
+
       // ── Fixture class gating ──────────────────────────────────────────────
       // Only active when fixtureType was passed. If Claude omits it, no filter applied.
       const fixtureTypeRequested = params.fixtureType as string | undefined
@@ -550,17 +581,76 @@ export const recommendFixturesTool = tool({
         })
       }
 
-      const ranked = rankCandidates(classifiedCandidates, ctx, Math.min(params.limit ?? 3, 3), !!params.manufacturerSlug, classMatchMap)
+      // Build candidate summaries for Claude ranking
+      const candidateSummaries = classifiedCandidates.slice(0, 30).map(p => ({
+        catalogNumber: p.catalogNumber,
+        displayName: p.displayName,
+        manufacturer: p.manufacturer.name,
+        lumens: p.lumensMin && p.lumensMax ? `${p.lumensMin}-${p.lumensMax}` : p.lumens,
+        wattage: p.wattageMin && p.wattageMax ? `${p.wattageMin}-${p.wattageMax}W` : p.wattage ? `${p.wattage}W` : null,
+        cri: p.cri,
+        cct: p.cctOptions?.join('/'),
+        voltage: p.voltage,
+        dlcListed: p.dlcListed,
+        dlcPremium: p.dlcPremium,
+        wetLocation: p.wetLocation,
+        fixtureType: p.canonicalFixtureType,
+      }))
+
+      const rankingResponse = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: `You are a lighting expert. Pick the top 3 best fixtures for this request and explain why.
+
+User request: ${params.applicationType}${params.fixtureType ? ` — ${params.fixtureType}` : ''}
+Application: ${params.applicationType}
+Budget: ${params.budgetSensitivity ?? 'standard'}
+Constraints: ${JSON.stringify({ fixtureType: params.fixtureType, minLumens: params.minLumens, maxWattage: params.maxWattage, wetLocation: params.wetLocation, dlcRequired: params.dlcRequired })}
+
+Candidates:
+${JSON.stringify(candidateSummaries, null, 2)}
+
+Return ONLY valid JSON — no preamble, no backticks:
+{
+  "picks": [
+    { "catalogNumber": "...", "rank": 1, "label": "TOP PICK", "reason": "one sentence why" },
+    { "catalogNumber": "...", "rank": 2, "label": "STRONG ALTERNATIVE", "reason": "one sentence why" },
+    { "catalogNumber": "...", "rank": 3, "label": "ALSO CONSIDER", "reason": "one sentence why" }
+  ]
+}`,
+        }],
+      })
+
+      const responseText = rankingResponse.content[0].type === 'text' ? rankingResponse.content[0].text : ''
+      let picks: Array<{ catalogNumber: string; rank: number; label: string; reason: string }> = []
+      try {
+        const parsed = JSON.parse(responseText)
+        picks = parsed.picks ?? []
+      } catch {
+        console.error('[recommend_fixtures] Failed to parse Claude ranking response:', responseText)
+        picks = classifiedCandidates.slice(0, 3).map((p, i) => ({
+          catalogNumber: p.catalogNumber,
+          rank: i + 1,
+          label: i === 0 ? 'TOP PICK' : i === 1 ? 'STRONG ALTERNATIVE' : 'ALSO CONSIDER',
+          reason: 'Selected based on fixture type and specification match.',
+        }))
+      }
+
+      // Match catalog numbers back to full product objects
+      const catalogMap = new Map(classifiedCandidates.map(p => [p.catalogNumber.toLowerCase(), p]))
+      const recommendations = picks
+        .sort((a, b) => a.rank - b.rank)
+        .map(pick => {
+          const product = catalogMap.get(pick.catalogNumber.toLowerCase())
+          if (!product) return null
+          return { ...product, rankLabel: pick.label, whyRecommended: pick.reason }
+        })
+        .filter(Boolean)
 
       return {
-        recommendations: ranked.map(c => ({
-          ...c.product,
-          score: c.score,
-          fitConfidence: c.fitConfidence,
-          rankLabel: c.rankLabel,
-          whyRecommended: c.whyRecommended,
-          tradeoffs: c.tradeoffs,
-        })),
+        recommendations,
         context: {
           applicationType: params.applicationType,
           projectPosture: ctx.projectPosture,
