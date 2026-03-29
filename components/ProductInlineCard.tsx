@@ -25,7 +25,7 @@ export default function ProductInlineCard({ product, onAddToSubmittal }: Props) 
       : null
 
   const wattageDisplay =
-    product.wattage != null
+    product.wattage != null && product.wattage > 0
       ? `${product.wattage}W`
       : product.wattageMin != null && product.wattageMax != null
       ? `${product.wattageMin}–${product.wattageMax}W`
