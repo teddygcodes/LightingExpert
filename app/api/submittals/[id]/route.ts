@@ -58,24 +58,34 @@ export async function PUT(
     if (catalogNumberOverride && catalogNumberOverride.length > 200) {
       return NextResponse.json({ error: 'catalogNumberOverride too long' }, { status: 400 })
     }
-    const maxOrder = await prisma.submittalItem.findFirst({
-      where: { submittalId: id },
-      orderBy: { sortOrder: 'desc' },
-      select: { sortOrder: true },
-    })
-    const item = await prisma.submittalItem.create({
-      data: {
-        submittalId: id,
-        productId,
-        fixtureType,
-        quantity: quantity || 1,
-        location: locationTag ?? location,
-        mountingHeight,
-        notes,
-        catalogNumberOverride: catalogNumberOverride ?? null,
-        sortOrder: (maxOrder?.sortOrder ?? -1) + 1,
-      },
-      include: { product: { select: { catalogNumber: true, displayName: true } } },
+    const loc = locationTag ?? location
+    if (loc && typeof loc === 'string' && loc.length > 200) {
+      return NextResponse.json({ error: 'location too long (max 200)' }, { status: 400 })
+    }
+    if (notes && typeof notes === 'string' && notes.length > 1000) {
+      return NextResponse.json({ error: 'notes too long (max 1000)' }, { status: 400 })
+    }
+    // Atomic sort order increment via transaction
+    const item = await prisma.$transaction(async (tx) => {
+      const maxOrder = await tx.submittalItem.findFirst({
+        where: { submittalId: id },
+        orderBy: { sortOrder: 'desc' },
+        select: { sortOrder: true },
+      })
+      return tx.submittalItem.create({
+        data: {
+          submittalId: id,
+          productId,
+          fixtureType,
+          quantity: quantity || 1,
+          location: loc,
+          mountingHeight,
+          notes,
+          catalogNumberOverride: catalogNumberOverride ?? null,
+          sortOrder: (maxOrder?.sortOrder ?? -1) + 1,
+        },
+        include: { product: { select: { catalogNumber: true, displayName: true } } },
+      })
     })
     return NextResponse.json(item)
   }

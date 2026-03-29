@@ -19,7 +19,12 @@ export function saveSpecSheet(
   const dir = path.join(process.cwd(), 'public', 'spec-sheets', safeManufacturer)
   ensureDir(dir)
   const filePath = path.join(dir, `${safeCatalog}.pdf`)
-  fs.writeFileSync(filePath, buffer)
+  try {
+    fs.writeFileSync(filePath, buffer)
+  } catch (err) {
+    console.error(`[storage] Failed to write spec sheet ${filePath}:`, err)
+    throw new Error(`Failed to save spec sheet for ${catalogNumber}`)
+  }
   return `/spec-sheets/${safeManufacturer}/${safeCatalog}.pdf`
 }
 
@@ -34,6 +39,11 @@ export function saveSubmittal(submittalId: string, buffer: Buffer): string {
   const dir = path.join(process.cwd(), 'public', 'submittals')
   ensureDir(dir)
   const filePath = path.join(dir, `${submittalId}.pdf`)
-  fs.writeFileSync(filePath, buffer)
+  try {
+    fs.writeFileSync(filePath, buffer)
+  } catch (err) {
+    console.error(`[storage] Failed to write submittal ${filePath}:`, err)
+    throw new Error(`Failed to save submittal PDF ${submittalId}`)
+  }
   return `/submittals/${submittalId}.pdf`
 }

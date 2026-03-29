@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import Anthropic from '@anthropic-ai/sdk'
 import { validateMatrixFieldPresence } from '@/lib/configurator'
+import { requireAuth } from '@/lib/auth'
 
 const anthropic = new Anthropic()
 const MAX_SPEC_TEXT_LENGTH = 80_000
@@ -59,6 +60,9 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = await requireAuth()
+  if (authErr) return authErr
+
   const { id: matrixId } = await params
 
   const matrix = await prisma.orderingMatrix.findUnique({

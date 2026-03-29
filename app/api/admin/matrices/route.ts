@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { MatrixType, SkuTableEntry, validateMatrixFieldPresence } from '@/lib/configurator'
+import { requireAuth } from '@/lib/auth'
 
 export async function GET() {
+  const authErr = await requireAuth()
+  if (authErr) return authErr
+
   const matrices = await prisma.orderingMatrix.findMany({
     include: {
       manufacturer: { select: { name: true, slug: true } },
@@ -17,6 +21,9 @@ export async function GET() {
 const VALID_MATRIX_TYPES: MatrixType[] = ['configurable', 'sku_table', 'hybrid']
 
 export async function PUT(req: NextRequest) {
+  const authErr = await requireAuth()
+  if (authErr) return authErr
+
   const body = await req.json()
   const { id, columns, suffixOptions, sampleNumber, confidence, skuTable: skuTableData, matrixType: rawMatrixType } = body
 

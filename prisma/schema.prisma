@@ -335,6 +335,7 @@ model Product {
   @@index([dlcListed])
   @@index([lastCrawled])
   @@index([canonicalFixtureType])
+  @@index([manufacturerId, isActive, canonicalFixtureType])
 }
 
 model CrossReference {
@@ -363,6 +364,7 @@ model CrossReference {
   @@unique([sourceProductId, targetProductId])
   @@index([sourceProductId])
   @@index([targetProductId])
+  @@index([targetProductId, confidence])
 }
 
 model Submittal {
@@ -434,6 +436,7 @@ model Chat {
 
   @@index([projectId])
   @@index([updatedAt])
+  @@index([projectId, updatedAt])
 }
 
 model CrawlLog {

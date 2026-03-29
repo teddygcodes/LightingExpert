@@ -3,14 +3,18 @@ import { prisma } from '@/lib/db'
 import { generateSubmittalPDF, FixtureEntry } from '@/lib/pdf/submittal-generator'
 import { getSpecSheetPath } from '@/lib/storage'
 
-// Fetch ordering matrix separator for a given matrix id via raw SQL
+// Fetch ordering matrix separators in batch via raw SQL
 // (bypasses stale Prisma client field validation)
-async function getMatrixSeparator(matrixId: string | null): Promise<string | null> {
-  if (!matrixId) return null
-  const rows = await prisma.$queryRaw<{ separator: string | null }[]>`
-    SELECT separator FROM "OrderingMatrix" WHERE id = ${matrixId} LIMIT 1
+async function getMatrixSeparators(matrixIds: string[]): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>()
+  if (matrixIds.length === 0) return map
+  const rows = await prisma.$queryRaw<{ id: string; separator: string | null }[]>`
+    SELECT id, separator FROM "OrderingMatrix" WHERE id = ANY(${matrixIds}::text[])
   `
-  return rows[0]?.separator ?? null
+  for (const row of rows) {
+    map.set(row.id, row.separator)
+  }
+  return map
 }
 
 export async function POST(
@@ -38,10 +42,7 @@ export async function POST(
       .filter(item => item.catalogNumberOverride && item.product.orderingMatrixId)
       .map(item => item.product.orderingMatrixId as string)
   )]
-  const separatorMap = new Map<string, string | null>()
-  await Promise.all(matrixIds.map(async id => {
-    separatorMap.set(id, await getMatrixSeparator(id))
-  }))
+  const separatorMap = await getMatrixSeparators(matrixIds)
 
   const fixtures: FixtureEntry[] = submittal.items.map(item => {
     const p = item.product

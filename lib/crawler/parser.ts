@@ -1,4 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
+
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6'
 import { FieldProvenance, FieldProvenanceMap, ProvenanceSource } from '../types'
 import {
   normalizeVoltage,
@@ -229,7 +231,7 @@ Respond ONLY with a valid JSON object. No explanation.`
 
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: CLAUDE_MODEL,
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     })
@@ -257,7 +259,14 @@ Respond ONLY with a valid JSON object. No explanation.`
     return { specs: mergedSpecs, provenance: mergedProvenance }
   } catch (err) {
     console.error('[Parser] AI fallback failed:', err)
-    return { specs: existingSpecs, provenance: existingProvenance }
+    // Lower confidence on all existing fields since AI couldn't verify/supplement
+    const degradedProvenance = { ...existingProvenance }
+    for (const [key, prov] of Object.entries(degradedProvenance)) {
+      if (prov.source === 'REGEX' && prov.confidence > 0.5) {
+        degradedProvenance[key] = { ...prov, confidence: Math.max(0.3, prov.confidence - 0.2) }
+      }
+    }
+    return { specs: existingSpecs, provenance: degradedProvenance }
   }
 }
 
@@ -282,7 +291,7 @@ Respond ONLY with a valid JSON object like {"LUMENS": ["600L","1200L"], "CCT": [
 
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: CLAUDE_MODEL,
       max_tokens: 512,
       messages: [{ role: 'user', content: prompt }],
     })

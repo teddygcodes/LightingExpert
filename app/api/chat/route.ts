@@ -37,7 +37,15 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const body = await req.json()
+  let body: { messages?: unknown[] }
+  try {
+    body = await req.json()
+  } catch {
+    return new Response(
+      JSON.stringify({ error: 'Invalid JSON in request body' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
   // Trim: keep last 20 messages; strip tool result content from messages older than 10 from end
   const allMessages = body.messages ?? []
   if (allMessages.length > 100) {

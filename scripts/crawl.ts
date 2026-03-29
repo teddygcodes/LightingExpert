@@ -23,6 +23,11 @@ import {
 
 const prisma = new PrismaClient()
 
+// Ensure Prisma disconnects on exit
+process.on('exit', () => { prisma.$disconnect() })
+process.on('SIGINT', () => { prisma.$disconnect().then(() => process.exit(130)) })
+process.on('SIGTERM', () => { prisma.$disconnect().then(() => process.exit(143)) })
+
 // Parse CLI args
 // --manufacturer=elite|acuity (default: elite)
 // --categories=slug1,slug2 (default: all categories for the manufacturer)
