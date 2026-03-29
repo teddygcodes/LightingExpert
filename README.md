@@ -1,155 +1,120 @@
-# Atlantis KB — Lighting Expert
+# Atlantis KB Lighting Expert
 
-A full-stack commercial lighting specification tool with a streaming AI chat interface. It crawls manufacturer catalogs across five brands, runs a two-pass spec extraction pipeline (regex → Claude AI fallback), stores normalized fixture data in PostgreSQL, surfaces everything through a Claude Sonnet agent with five tool calls, runs a category-aware cross-reference engine for finding equivalent products, and generates professional PDF submittal packages.
+A production-grade commercial lighting specification platform built for outside sales engineers and lighting specifiers. Crawls six manufacturer catalogs, normalizes product data through a two-pass extraction pipeline (regex + Claude AI fallback), runs a rule-based cross-reference engine across manufacturers, and generates professional PDF submittal packages — all accessible through a streaming AI chat interface or direct web UI.
 
 ---
 
 ## What It Does
 
-Lighting designers and contractors deal with three workflows constantly:
+Commercial lighting specification involves three core workflows that this system automates:
 
-1. **Spec a fixture** — find and verify exact wattage, CCT, CRI, voltage, DLC status, and form factor for a product from any of the five supported manufacturers
-2. **Cross-reference alternatives** — when a product is discontinued or over-budget, find functionally equivalent substitutes ranked by confidence score, scoped to the same fixture category
-3. **Produce submittals** — assemble a PDF package (cover sheet + fixture schedule + embedded manufacturer spec sheets) to submit to architects or owners for approval
+1. **Spec a fixture** — Search across 6 manufacturers by catalog number, fixture type, wattage, lumens, CCT, CRI, voltage, DLC status, or any combination. Every extracted spec carries provenance metadata (source, confidence, raw value) so you know exactly where each number came from.
 
-All three are accessible through a streaming chat interface backed by a Claude Sonnet 4.6 agent with five database tools, or directly through the web UI pages.
+2. **Cross-reference alternatives** — Given a source fixture, the engine finds compatible substitutes across all manufacturers. Eight hard-reject rules eliminate impossible matches, nine weighted scoring factors rank what remains, and an optional AI post-filter catches edge cases. Results are classified as Direct Replacement, Functional Equivalent, Upgrade, Similar, or Budget Alternative.
+
+3. **Generate submittals** — Assemble professional PDF packages with a branded cover sheet, landscape fixture schedule, and embedded manufacturer spec sheets. Per-item catalog number overrides via the ordering matrix configurator. Missing or corrupt spec sheets get clean placeholder pages.
+
+All three workflows are available through a **Claude Sonnet chat agent** with five integrated tools (search, cross-reference, spec sheet lookup, submittal addition, fixture recommendation), or through dedicated UI pages.
 
 ---
 
 ## Manufacturer Coverage
 
-| Manufacturer | Brands Included | Status |
+| Manufacturer | Brands | Crawler |
 |---|---|---|
-| **Elite Lighting** | Elite, Maxilume | ✅ Fully crawled + extracted |
-| **Acuity Brands** | Lithonia Lighting, Juno, Holophane, Peerless, Mark Architectural | ✅ Crawled + extracted |
-| **Cooper Lighting Solutions** | Metalux, Halo, Corelite, Lumark, McGraw-Edison, Fail-Safe, Ametrix | ✅ Crawled + extracted |
-| **Current Lighting** | Columbia, Prescolite, Kim, Litecontrol, Architectural Area Lighting | ✅ Crawled + extracted |
-| **Lutron** | Ketra, Ivalo, Lumaris | ✅ Crawled + extracted |
-
-Spec extraction runs in a separate pipeline (`extract-specs` → `promote-specs`) using concurrent PDF parsing with a Claude Haiku AI fallback for products where regex confidence falls below threshold.
+| **Elite Lighting** | Elite, Maxilume | `lib/crawler/elite.ts` |
+| **Acuity Brands** | Lithonia, Juno, Holophane, Peerless, Mark Architectural | `lib/crawler/acuity.ts` |
+| **Contractor Select** | Contractor Select (Acuity value tier) | `lib/crawler/acuity-cs.ts` |
+| **Cooper Lighting** | Metalux, Halo, Corelite, Lumark, McGraw-Edison, Fail-Safe, Ametrix | `lib/crawler/cooper.ts` |
+| **Current Lighting** | Columbia, Prescolite, Kim, Litecontrol, AAL | `lib/crawler/current.ts` |
+| **Lutron** | Ketra, Ivalo, Lumaris | `lib/crawler/lutron.ts` |
 
 ---
 
-## Technology Stack
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                         Next.js 16 App Router                        │
+│                                                                      │
+│  /chat     /products     /cross-reference     /submittals    /admin   │
+│    │            │                │                 │            │     │
+│    └────────────┴────────────────┴─────────────────┴────────────┘     │
+│                            API Routes                                 │
+│   /api/chat   /api/products   /api/cross-reference   /api/submittals  │
+│   /api/categories   /api/manufacturers   /api/admin/matrices          │
+└────────────────────────────┬─────────────────────────────────────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            │                │                │
+     ┌──────▼──────┐  ┌─────▼───────┐  ┌─────▼──────────┐
+     │ PostgreSQL   │  │ Cross-Ref   │  │ PDF Generator  │
+     │ Prisma 5     │  │ Engine      │  │ pdf-lib        │
+     │ tsvector     │  │ 8 rejects   │  │ cover + sched  │
+     │ pg_trgm      │  │ 9 scores    │  │ + spec sheets  │
+     └──────▲──────┘  └─────────────┘  └────────────────┘
+            │
+     ┌──────┴──────────────────────────────────────────────┐
+     │              Offline Pipeline (ts-node)              │
+     │                                                      │
+     │  crawl.ts              Playwright + Cheerio scrapers  │
+     │  extract-specs.ts      PDF → regex → AI fallback      │
+     │  promote-specs.ts      Staging → live product fields   │
+     │  classify-fixtures.ts  Category classification         │
+     │  extract-matrices.ts   Ordering matrix extraction      │
+     └──────────────────────────────────────────────────────┘
+```
+
+Crawlers and extraction scripts are standalone `ts-node` processes — not API routes. Playwright requires a full Chromium instance, and these pipelines can run for hours against large catalogs. They execute manually or via cron on a machine with Node and Chromium installed.
+
+---
+
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 16.1.7 App Router, React 19, TypeScript 5 |
-| Database | PostgreSQL 14+ + Prisma 5 ORM |
-| AI Chat Agent | `@ai-sdk/anthropic`, Claude Sonnet 4.6, 5 tool calls, streaming |
-| AI Spec Extraction | `@anthropic-ai/sdk`, Claude Haiku (two-pass extraction fallback) |
-| AI Cross-Ref Filter | Claude Haiku (post-score fixture sanity check) |
-| Web Crawling | Playwright 1.58 + Cheerio (standalone `ts-node`, not serverless) |
-| PDF Extraction | pdf-parse |
-| PDF Generation | pdf-lib |
+| Framework | Next.js 16 (App Router), React 19, TypeScript 5 |
+| Database | PostgreSQL 15+ with Prisma 5 ORM, `tsvector` + `pg_trgm` |
+| AI Chat | Vercel AI SDK (`streamText`), Claude Sonnet, 5 tool definitions |
+| AI Extraction | Anthropic SDK, Claude Sonnet (regex fallback), Claude Haiku (cross-ref filter) |
+| Crawling | Playwright 1.58 + Cheerio (standalone scripts) |
+| PDF Generation | pdf-lib (cover sheets, fixture schedules, assembly) |
+| PDF Extraction | pdf-parse (spec sheet text extraction) |
 | PDF Rendering | pdfjs-dist (client-side inline preview + annotation) |
-| Search | PostgreSQL `tsvector` + `plainto_tsquery` + `pg_trgm` fuzzy fallback |
+| Auth | Clerk (optional — gracefully bypassed when env vars unset) |
+| Styling | Tailwind CSS 4 + CSS custom properties design system |
 | Icons | lucide-react |
-| Styling | Tailwind CSS 4 + inline design system |
-
----
-
-## Architecture Overview
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        Next.js App Router                        │
-│                                                                  │
-│  /chat   /products   /cross-reference   /submittals   /admin     │
-│    │          │              │               │           │       │
-│    └──────────┴──────────────┴───────────────┴───────────┘       │
-│                           API Routes                             │
-│   /api/chat    /api/products    /api/cross-reference             │
-│   /api/submittals/**   /api/categories   /api/manufacturers      │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │
-          ┌────────────────┼────────────────┐
-          │                │                │
-   ┌──────▼──────┐  ┌──────▼──────┐  ┌─────▼──────────┐
-   │  PostgreSQL  │  │  Cross-Ref  │  │  PDF Generator │
-   │  (Prisma 5)  │  │  Engine     │  │  (pdf-lib)     │
-   └──────▲──────┘  └─────────────┘  └────────────────┘
-          │
-   ┌──────┴──────────────────────────────────────────┐
-   │              Offline Pipeline (ts-node)          │
-   │                                                  │
-   │  scripts/crawl.ts          (Playwright crawler)  │
-   │  scripts/extract-specs-from-pdfs.ts  (10x pool)  │
-   │  scripts/promote-extractions.ts      (stage→prod) │
-   │  scripts/classify-fixtures.ts        (category)   │
-   └──────────────────────────────────────────────────┘
-```
-
-The crawler and extraction pipeline are standalone `ts-node` scripts, not API routes. Playwright can't run serverless, and the pipeline is long-running. These run manually or via cron on a machine with Node + Chromium installed.
 
 ---
 
 ## Data Model
 
+Eight models, seven enums. Core relationships:
+
 ```
-Manufacturer ──< Category (hierarchical tree) ──< Product
-Product ──< CrossReference (as source)
-Product ──< CrossReference (as target)
+Manufacturer ──< Category (hierarchical tree per manufacturer)
+Manufacturer ──< Product (50+ fields, fieldProvenance JSON per field)
+Manufacturer ──< OrderingMatrix (configurable / SKU table / hybrid)
+Manufacturer ──< CrawlLog (audit trail per crawl run)
+
+Product ──< CrossReference (source) ──> Product (target)
 Product ──< SubmittalItem ──> Submittal
-Submittal ──> Project
-Manufacturer ──< CrawlLog
-Chat (messages stored as JSON column)
+Product ──> OrderingMatrix (optional, for part number configuration)
+
+Chat ──> ChatProject (optional grouping)
 ```
 
-### Key design decisions
+### Key Design Decisions
 
-**Field provenance** — every extracted field on a `Product` carries a `fieldProvenance` JSON object tracking `source` (REGEX | AI_FALLBACK | MANUAL | EMPTY) and `confidence` (0–1). The UI highlights low-confidence fields in orange and manually-corrected fields in blue. MANUAL fields are never overwritten by subsequent crawl or extraction runs.
+**Field provenance.** Every extracted value on a `Product` records its `source` (REGEX, AI_FALLBACK, MANUAL), `confidence` (0–1), and `rawValue`. MANUAL fields are never overwritten by crawls. The UI surfaces confidence indicators so specifiers can judge data quality at a glance.
 
-**Staged spec extraction** — raw PDF text and AI extraction results are written to staging columns (`rawSpecText`, `specExtractionJson`, `specEvidenceJson`) first. A separate `promote-specs` script validates and writes them to the live product columns. This keeps a dirty extraction run from clobbering production data.
+**Two-pass extraction.** Regex runs first — fast, deterministic, free. AI fallback fires only when overall confidence drops below threshold. This keeps API costs proportional to catalog complexity, not catalog size. On AI failure, confidence scores are degraded rather than silently preserved.
 
-**Range columns** — many fixtures ship in wattage-selectable or lumen-selectable configurations. The schema carries both nominal values (`wattage`, `lumens`) and range columns (`wattageMin/Max`, `lumensMin/Max`) so the cross-reference engine can do range-overlap scoring instead of brittle point comparisons.
+**Staged spec promotion.** Raw PDF text and AI outputs land in staging columns (`rawSpecText`, `specExtractionJson`). A separate `promote-specs` script validates and writes them to live product columns. A bad extraction run never clobbers production data.
 
-**Full-text search** — product text is maintained in a PostgreSQL `tsvector` column via a `BEFORE INSERT OR UPDATE` trigger. Queries use `plainto_tsquery` with `ts_rank` ordering for primary results, falling back to `pg_trgm` word-similarity scoring to catch typos and partial catalog numbers. The trigger must be applied manually after `db migrate` (see setup).
+**Range columns.** Many fixtures ship in wattage-selectable or lumen-selectable configurations. The schema carries both nominal values (`wattage`, `lumens`) and range columns (`wattageMin/Max`, `lumensMin/Max`) so the cross-reference engine can do range-overlap scoring instead of brittle point comparisons.
 
-**Category tree** — each manufacturer has an independent hierarchical category tree (root → family → sub-family). The `path` field is immutable after creation and tree-local (e.g., `interior-lighting/high-bay-low-bay`). The cross-reference engine uses these paths as the primary fixture-type signal.
-
----
-
-## Chat Agent
-
-The main interface is a streaming chat backed by Claude Sonnet 4.6 with five tools:
-
-| Tool | What it does |
-|---|---|
-| `search_products` | Full-text + structured filter search. Accepts query, manufacturer, categorySlug, minLumens, maxWattage, CCT, minCRI, environment, DLC, wetLocation. Typo-tolerant via pg_trgm fallback. |
-| `cross_reference` | Runs the category-aware matching engine against a real catalog number. Returns top matches with confidence score, match type, and important spec deltas. |
-| `get_spec_sheet` | Returns the cached spec sheet PDF path for inline rendering. Handles both exact-product and family-level spec sheets. |
-| `add_to_submittal` | Adds a fixture to the most recent DRAFT submittal (or creates one). Auto-assigns the next available fixture type letter. |
-| `recommend_fixtures` | Given a fixture class and project context (space type, mounting height, target lumens, etc.), returns a ranked shortlist of candidates with justification. |
-
-The agent is instructed to call `search_products` before `cross_reference` — it never guesses or constructs catalog numbers from partial user input. When a user mentions a fixture type (highbay, troffer, downlight, etc.), the agent maps it to a `categorySlug` parameter to constrain the search to the right fixture group.
-
-Chat history is persisted to PostgreSQL (debounced save, 800ms) and available in the sidebar by session. Conversations are trimmed at 20 messages for context; tool results older than position 10 from the end are stripped to avoid token bloat.
-
----
-
-## Spec Extraction Pipeline
-
-Spec extraction runs as a two-stage offline process separate from the live crawl:
-
-```
-scripts/extract-specs-from-pdfs.ts
-  └─ For each product with a spec sheet PDF:
-      1. Extract text via pdf-parse (strips null bytes)
-      2. Regex pass: attempt to extract all spec fields
-      3. If overall confidence < 0.5: Claude Haiku AI fallback
-      4. Write results to staging columns (rawSpecText, specExtractionJson)
-      5. 10x concurrent workers (configurable via --concurrency=N)
-
-scripts/promote-extractions.ts
-  └─ For each product with a staged extraction:
-      1. Validate field types and confidence scores
-      2. Skip MANUAL-sourced fields (never overwrite)
-      3. Write to live product columns with provenance metadata
-      4. Log promotion stats (fields written, skipped, confidence distribution)
-```
-
-The AI extraction uses Claude Haiku (not Sonnet) to keep costs manageable. At current pricing, extraction runs approximately $0.004–$0.018 per product depending on spec sheet length and model. The 10x concurrency pool processes a 3,000-product catalog in roughly 15–20 minutes.
+**Hard rejects before scoring.** The cross-reference engine applies binary pass/fail rules (voltage, mounting, environment, CCT, form factor) before computing weighted scores. This prevents wasting compute on obviously incompatible fixtures and keeps the scored result set meaningful.
 
 ---
 
@@ -157,34 +122,29 @@ The AI extraction uses Claude Haiku (not Sonnet) to keep costs manageable. At cu
 
 The engine (`lib/cross-reference.ts`) is fully rule-based — no vector similarity.
 
-### Category pre-filtering
+### Category Pre-Filtering
 
-Before any scoring, the engine determines the source fixture's **fixture group** (HIGH_BAY, TROFFER_PANEL, DOWNLIGHT, WALL_PACK, etc.) from its category path using an authoritative `PATH_SEGMENT_TO_GROUP` map of ~90 category slug entries.
+The source fixture's **fixture group** (HIGH_BAY, TROFFER_PANEL, DOWNLIGHT, WALL_PACK, etc.) is determined from its category path. Candidates are built in three passes:
 
-The candidate pool is built in three passes:
+1. **Group pass** — same fixture group only. If >= 5 candidates, stop.
+2. **Branch pass** — relax to same root category branch. If >= 5, stop.
+3. **All pass** — no detectable category; fall back to all active products.
 
-1. **Group pass** — only products in the same fixture group. If ≥ 5 candidates, stop.
-2. **Branch pass** — relax to same root category branch (interior vs exterior). If ≥ 5, stop.
-3. **All pass** — source has no detectable category; fall back to all active products.
+A high bay cross-reference will never surface a troffer or downlight.
 
-A highbay cross-reference will never surface a troffer or downlight regardless of how similar their specs look.
-
-### Hard rejects (8 rules)
-
-Any failing rule immediately eliminates a candidate:
+### Hard Reject Rules
 
 | Rule | Logic |
 |---|---|
-| Category group mismatch | Different fixture groups (belt + suspenders after pre-filter) |
 | Environment mismatch | INDOOR vs OUTDOOR (BOTH bypasses) |
 | Emergency backup | Source requires it; target does not |
-| Wet location | Source rated wet; target is not |
-| NEMA downgrade | Source specifies NEMA; target does not |
-| Voltage incompatible | Mismatched (UNIVERSAL and V120_277 bypass) |
-| Mounting incompatible | No overlapping mounting type |
-| Form factor | Both specify incompatible form factors (2×4 ≠ 2×2) |
+| Voltage incompatible | Mismatched voltages (UNIVERSAL and V120_277 bypass) |
+| Mounting incompatible | No overlapping mounting types |
+| CCT incompatible | Zero CCT overlap when source has 2+ defined options |
+| Form factor | Incompatible sizes (2x4 vs 2x2, 4" vs 6") |
+| Category mismatch | Different fixture groups (redundant safety net) |
 
-### Scoring (9 weighted factors, sum = 1.0)
+### Scoring Factors (9 weighted, sum = 1.0)
 
 | Factor | Weight |
 |---|---|
@@ -193,159 +153,67 @@ Any failing rule immediately eliminates a candidate:
 | CRI match | 0.10 |
 | CCT options overlap | 0.10 |
 | Dimming protocol | 0.10 |
-| DLC listing status | 0.10 |
+| DLC listing | 0.10 |
 | IP/NEMA rating | 0.10 |
-| Wattage range overlap | 0.05 |
+| Wattage overlap | 0.05 |
 | Physical dimensions | 0.05 |
 
-### AI post-filter
+Soft penalties (not hard rejects): wet location downgrade (-0.05), NEMA rating downgrade (-0.04).
 
-After scoring, the top 5 candidates go through a Claude Haiku fixture-type sanity check that removes obvious mismatches slipping through (sign lights, roadway fixtures, exit/emergency, sensors). With category pre-filtering in place this rarely fires, but it's a useful last-line safety net.
+### Match Classification
 
-### Match types
-
-| Score | Match type |
+| Score | Type |
 |---|---|
-| ≥ 0.90 | DIRECT_REPLACEMENT |
-| ≥ 0.75 | FUNCTIONAL_EQUIVALENT |
-| ≥ 0.60 | UPGRADE (if target lumens > source × 1.1) or SIMILAR |
+| >= 0.90 | DIRECT_REPLACEMENT |
+| >= 0.75 | FUNCTIONAL_EQUIVALENT |
+| >= 0.60 | UPGRADE (if target lumens > source x 1.1) or SIMILAR |
 | < 0.60 | BUDGET_ALTERNATIVE |
 
 ---
 
-## Security
+## Chat Agent
 
-The following hardening measures are in place as of v1:
+Claude Sonnet with five tools, streamed via Vercel AI SDK:
 
-- **SQL injection**: search input is length-capped (200 chars) and passed to Prisma's `$queryRaw` template literals which parameterize correctly. Manual escaping removed.
-- **Path traversal**: all spec sheet paths resolved with `path.resolve()` and validated against the `public/` boundary before file read.
-- **Internal field exposure**: `rawSpecText`, `specExtractionJson`, `specEvidenceJson`, `crawlEvidence` are stripped from all API responses before sending to clients.
-- **Security headers**: `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy` applied globally via `next.config.ts`.
-- **Error sanitization**: all catch blocks log full errors server-side and return generic messages to clients. No stack traces or Prisma error details leave the server.
-- **Env var validation**: `ANTHROPIC_API_KEY` checked at startup with a clear error; no non-null assertions on required secrets.
-- **Rate limiting**: IP-based, 20 req/min on the chat endpoint. In-memory Map with 60s cleanup to prevent unbounded growth.
-- **DoS guards**: messages array capped at 100 per request; pagination capped at 100 results/page.
-- **Next.js CVEs**: running 16.1.7 — patches CSRF bypass, HTTP request smuggling, and two DoS vulnerabilities present in 16.1.6 and earlier.
+| Tool | Purpose |
+|---|---|
+| `search_products` | Full-text + structured filter search (query, manufacturer, category, lumen/wattage ranges, CCT, CRI, environment, DLC, wet location) |
+| `cross_reference` | Runs the matching engine against a catalog number |
+| `get_spec_sheet` | Returns cached spec sheet PDF path for inline rendering |
+| `add_to_submittal` | Adds a fixture to the most recent DRAFT submittal |
+| `recommend_fixtures` | Given a fixture class and project context, returns ranked candidates |
 
-Not in scope for v1: authentication (Clerk planned for v2), Redis-backed rate limiting, CSRF tokens, strict CSP.
+The agent always calls `search_products` before `cross_reference` — it never guesses catalog numbers. Chat history persists to PostgreSQL with debounced saves. Conversations are trimmed at 20 messages; tool results older than position 10 are stripped to manage token count. Rate limited at 20 requests/IP/minute.
 
 ---
 
-## Directory Structure
-
-```
-atlantiskb-lighting/
-├── app/
-│   ├── api/
-│   │   ├── chat/route.ts                  # POST streaming chat, rate-limited by IP
-│   │   ├── products/route.ts              # GET list (search, filter, paginate)
-│   │   ├── products/[id]/route.ts         # GET detail, PUT edit with provenance
-│   │   ├── categories/route.ts            # GET category tree
-│   │   ├── manufacturers/route.ts         # GET manufacturer list (capped at 100)
-│   │   ├── cross-reference/route.ts       # GET ?catalogNumber -> matching engine
-│   │   ├── submittals/route.ts            # GET list, POST create
-│   │   ├── submittals/[id]/route.ts       # GET, PUT, item ops
-│   │   ├── submittals/[id]/generate/      # POST -> assemble + save PDF
-│   │   ├── projects/route.ts              # GET/POST project management
-│   │   ├── chats/route.ts                 # GET/POST chat sessions
-│   │   └── crawl-log/route.ts             # GET crawl history
-│   ├── chat/[id]/page.tsx                 # Chat session page
-│   ├── products/page.tsx                  # Product browser
-│   ├── products/[id]/page.tsx             # Product detail + inline editor
-│   ├── submittals/page.tsx                # Submittal list
-│   ├── submittals/[id]/page.tsx           # Submittal detail + PDF generator
-│   ├── cross-reference/page.tsx           # Manual cross-reference UI
-│   ├── admin/page.tsx                     # Stats + crawl log
-│   ├── layout.tsx                         # Root layout (sidebar + topbar)
-│   ├── error.tsx                          # Global error boundary (generic message)
-│   └── loading.tsx                        # Global loading skeleton
-├── components/
-│   ├── ChatInterface.tsx                  # Streaming chat, tool result rendering
-│   ├── ChatMessage.tsx                    # Message bubble + tool call display
-│   ├── ProductInlineCard.tsx              # Compact product card in chat results
-│   ├── SpecSheetPreview.tsx               # Inline PDF viewer (pdfjs-dist)
-│   ├── PdfAnnotator.tsx                   # PDF markup: highlight + text boxes + download
-│   ├── CrossReferenceResult.tsx           # Match card + spec delta table
-│   ├── Topbar.tsx / Sidebar.tsx           # Shell navigation
-│   ├── ProductCard.tsx                    # Confidence badge + catalog number
-│   ├── ProductEditor.tsx                  # Inline spec editor + provenance badges
-│   ├── SubmittalBuilder.tsx               # Project info + fixture add form
-│   ├── FixtureScheduleTable.tsx           # Drag-reorder fixture schedule
-│   ├── SpecBadge.tsx                      # Source/confidence badge component
-│   └── EmptyState.tsx
-├── lib/
-│   ├── agent/
-│   │   ├── system-prompt.ts               # Claude agent instructions + tool guidance
-│   │   ├── tools.ts                       # 5 tool definitions (Zod schemas + execute)
-│   │   ├── rate-limit.ts                  # In-memory rate limiter (20 req/min, auto-cleanup)
-│   │   └── recommend.ts                   # Fixture class inference + candidate ranking
-│   ├── crawler/
-│   │   ├── elite.ts                       # Elite Lighting Playwright crawler
-│   │   ├── parser.ts                      # Two-pass regex + AI extraction pipeline
-│   │   └── normalize.ts                   # Voltage/dimming/mounting normalization maps
-│   ├── pdf/
-│   │   ├── cover-sheet.ts                 # US Letter title page
-│   │   ├── fixture-schedule.ts            # Landscape schedule table (13 cols)
-│   │   └── submittal-generator.ts         # PDF assembly orchestrator (path-traversal safe)
-│   ├── cross-reference.ts                 # Category pre-filter + hard rejects + scoring
-│   ├── products-search.ts                 # tsvector + pg_trgm fuzzy query builder
-│   ├── storage.ts                         # Spec sheet + submittal file I/O
-│   ├── thumbnails.ts                      # Thumbnail generation
-│   ├── categoryLabels.ts                  # Human-readable category label map
-│   ├── db.ts                              # Prisma singleton
-│   └── types.ts                           # Shared TypeScript types
-├── prisma/
-│   ├── schema.prisma                      # 8 models, 7 enums
-│   ├── seed.ts                            # Seeds manufacturers + root categories
-│   └── migrations/
-│       └── 001_search_vector_trigger.sql  # tsvector + pg_trgm trigger (apply after migrate)
-├── scripts/
-│   ├── crawl.ts                           # CLI entry point (--manufacturer=elite|acuity|cooper|current|lutron)
-│   ├── extract-specs-from-pdfs.ts         # 10x concurrent PDF → staged extraction
-│   ├── promote-extractions.ts             # Stage → live product columns
-│   ├── classify-fixtures.ts               # Rule-based fixture category classification
-│   ├── classify-fixtures-ai.ts            # AI-assisted fixture classification
-│   ├── backfill-thumbnails.ts             # Elite thumbnail backfill
-│   ├── backfill-acuity-pdfs.ts            # Acuity spec sheet backfill
-│   ├── backfill-acuity-thumbs.ts          # Acuity thumbnail backfill
-│   ├── backfill-cooper-thumbs.ts          # Cooper thumbnail backfill
-│   ├── backfill-current-thumbs.ts         # Current Lighting thumbnail backfill
-│   └── add-acuity-categories.ts           # Acuity category tree seeding
-├── public/
-│   ├── spec-sheets/                       # Cached manufacturer PDFs (gitignored)
-│   ├── submittals/                        # Generated submittal PDFs (gitignored)
-│   └── thumbnails/                        # Product thumbnails (gitignored)
-└── tsconfig.scripts.json                  # CommonJS tsconfig for ts-node scripts
-```
-
----
-
-## Setup
+## Getting Started
 
 ### Prerequisites
 
 - Node.js 20+
-- PostgreSQL 14+ with the `pg_trgm` extension available
-- `.env` (gitignored):
+- PostgreSQL 15+ with `pg_trgm` extension
+- Anthropic API key
 
-```env
-DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/atlantiskb_lighting"
-ANTHROPIC_API_KEY="sk-ant-..."
-```
-
-### Install and initialize
+### Setup
 
 ```bash
 # Install dependencies
 npm install
 
-# Install Playwright Chromium (needed for crawling)
+# Install Playwright Chromium (for crawling)
 npx playwright install chromium
+
+# Configure environment
+cp .env.example .env
+# Edit .env:
+#   DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/atlantiskb_lighting"
+#   ANTHROPIC_API_KEY="sk-ant-..."
 
 # Run database migrations
 npx prisma migrate deploy
 
-# Apply the tsvector + pg_trgm trigger (required after every schema migration)
+# Apply tsvector + pg_trgm trigger (required after every migration)
 psql $DATABASE_URL < prisma/migrations/001_search_vector_trigger.sql
 
 # Seed manufacturers and root categories
@@ -355,71 +223,38 @@ npm run db:seed
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open [http://localhost:3000](http://localhost:3000).
 
-> **Note on `db:push`:** The `db:push` command is intentionally gated behind `FORCE=1` to prevent accidental data loss. Use `prisma migrate dev` for schema changes during development and `prisma migrate deploy` for production. Only use `FORCE=1 npm run db:push` if you know what you're doing.
-
-### Crawling
+### Crawling a Manufacturer
 
 ```bash
-# Crawl all supported manufacturers (long-running)
-npm run crawl
-
 # Crawl a specific manufacturer
-npm run crawl:acuity
-npm run crawl:cooper
-npm run crawl:current
-npm run crawl:lutron
+npm run crawl -- --manufacturer=elite
+npm run crawl -- --manufacturer=acuity
+npm run crawl -- --manufacturer=cooper
+npm run crawl -- --manufacturer=current
+npm run crawl -- --manufacturer=lutron
+
+# Crawl specific categories only
+npm run crawl -- --manufacturer=elite --categories=interior-lighting,exterior-lighting
 ```
 
-### Spec extraction pipeline
+### Spec Extraction Pipeline
 
 ```bash
-# Step 1: Extract specs from downloaded PDFs (10x concurrent workers)
+# 1. Extract specs from downloaded PDFs (10x concurrent workers)
 npm run extract-specs
 
-# Optional: control concurrency
-npx ts-node --project tsconfig.scripts.json scripts/extract-specs-from-pdfs.ts --concurrency=5
-
-# Step 2: Promote staged extractions to live product columns
+# 2. Promote staged extractions to live product columns
 npm run promote-specs
+
+# 3. Classify fixture types
+npm run classify        # Rule-based
+npm run classify:ai     # AI-assisted for unresolved types
+
+# 4. Extract ordering matrices from spec sheets
+npm run extract-matrices
 ```
-
-### Useful database commands
-
-```bash
-npx prisma migrate dev       # Create + apply a new migration
-npx prisma migrate deploy    # Apply pending migrations (production)
-npm run db:seed              # Re-seed manufacturers + categories
-npm run db:studio            # Browse data in Prisma Studio GUI
-```
-
----
-
-## npm Scripts Reference
-
-| Script | What it does |
-|---|---|
-| `npm run dev` | Start Next.js dev server (Turbopack) |
-| `npm run build` | Production build |
-| `npm run lint` | ESLint |
-| `npm run crawl` | Run Playwright crawler (all manufacturers) |
-| `npm run crawl:acuity` | Crawl Acuity Brands only |
-| `npm run crawl:cooper` | Crawl Cooper Lighting only |
-| `npm run crawl:current` | Crawl Current Lighting only |
-| `npm run crawl:lutron` | Crawl Lutron only |
-| `npm run extract-specs` | Run 10x concurrent spec extraction pipeline |
-| `npm run promote-specs` | Promote staged extractions to live columns |
-| `npm run classify` | Rule-based fixture category classification |
-| `npm run classify:ai` | AI-assisted fixture classification |
-| `npm run backfill:elite-thumbs` | Backfill Elite product thumbnails |
-| `npm run backfill:acuity-pdfs` | Backfill Acuity spec sheet PDFs |
-| `npm run backfill:acuity-thumbs` | Backfill Acuity thumbnails |
-| `npm run backfill:cooper-thumbs` | Backfill Cooper thumbnails |
-| `npm run backfill:current-thumbs` | Backfill Current Lighting thumbnails |
-| `npm run db:migrate` | Create + apply a new Prisma migration |
-| `npm run db:seed` | Seed manufacturers + root categories |
-| `npm run db:studio` | Open Prisma Studio |
 
 ---
 
@@ -428,15 +263,57 @@ npm run db:studio            # Browse data in Prisma Studio GUI
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `ANTHROPIC_API_KEY` | Yes | Used by chat agent (Claude Sonnet 4.6), spec extraction fallback (Claude Haiku), and cross-reference post-filter (Claude Haiku) |
+| `ANTHROPIC_API_KEY` | Yes | Claude API key (chat, extraction, cross-ref filter) |
+| `CLERK_SECRET_KEY` | No | Enables Clerk authentication |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | No | Clerk frontend key |
+| `CLAUDE_MODEL` | No | Override extraction model (default: `claude-sonnet-4-6`) |
+| `CLAUDE_FAST_MODEL` | No | Override cross-ref filter model (default: `claude-haiku-4-5-20251001`) |
+
+When Clerk env vars are unset, authentication is bypassed entirely. A warning is logged in production to prevent accidental unauthenticated deployments.
 
 ---
 
-## Full-Text Search Note
+## npm Scripts
 
-The `searchVector` column is `Unsupported("tsvector")` in the Prisma schema — Prisma does not create or manage it. It is populated by a `BEFORE INSERT OR UPDATE` trigger in `prisma/migrations/001_search_vector_trigger.sql`. The same migration enables `pg_trgm` for the typo-tolerant fuzzy fallback path.
+| Script | Description |
+|---|---|
+| `npm run dev` | Start dev server (Turbopack) |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint |
+| `npm run crawl` | Playwright crawler (all manufacturers) |
+| `npm run crawl:acuity` | Crawl Acuity Brands |
+| `npm run crawl:cooper` | Crawl Cooper Lighting |
+| `npm run crawl:current` | Crawl Current Lighting |
+| `npm run crawl:lutron` | Crawl Lutron |
+| `npm run extract-specs` | 10x concurrent PDF spec extraction |
+| `npm run promote-specs` | Promote staged extractions to live columns |
+| `npm run classify` | Rule-based fixture classification |
+| `npm run classify:ai` | AI-assisted classification |
+| `npm run extract-matrices` | Extract ordering matrices from spec sheets |
+| `npm run db:migrate` | Create + apply Prisma migration |
+| `npm run db:seed` | Seed manufacturers + root categories |
+| `npm run db:studio` | Open Prisma Studio |
 
-**If the search bar returns no results after a schema migration**, the trigger was dropped and needs to be re-applied:
+---
+
+## Security
+
+- **SQL injection**: All queries parameterized via Prisma template literals. Search input length-capped at 200 characters.
+- **Path traversal**: Spec sheet paths resolved with `path.resolve()` and validated against the `public/` boundary.
+- **Auth**: Admin routes protected with `requireAuth()`. Auth bypassed with logged warning when Clerk env vars unset.
+- **Internal field stripping**: `rawSpecText`, `specExtractionJson`, `specEvidenceJson`, `crawlEvidence` stripped from all API responses.
+- **Security headers**: `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy` applied globally.
+- **Rate limiting**: IP-based, 20 req/min on chat endpoint. In-memory with 60s cleanup.
+- **Request guards**: Messages array capped at 100/request. Pagination capped at 100 results/page. String fields length-validated.
+- **Error handling**: Server-side logging with generic client responses. No stack traces or Prisma errors exposed. Global error boundary with error digest IDs.
+
+---
+
+## Full-Text Search
+
+The `searchVector` column is `Unsupported("tsvector")` in the Prisma schema — Prisma does not create or manage it. It is populated by a `BEFORE INSERT OR UPDATE` trigger. The same migration enables `pg_trgm` for typo-tolerant fuzzy fallback.
+
+If search returns no results after a schema migration, the trigger was dropped:
 
 ```bash
 psql $DATABASE_URL < prisma/migrations/001_search_vector_trigger.sql
@@ -448,8 +325,7 @@ psql $DATABASE_URL < prisma/migrations/001_search_vector_trigger.sql
 
 | Version | Feature |
 |---|---|
-| **v1.x** | Finish extracting remaining ~3,500 products (Haiku, ~$3–4), re-run promote-specs |
-| **v2** | Clerk authentication, multi-tenant projects, client-facing submittal portal |
-| **v2** | Redis-backed rate limiting, strict CSP, CSRF tokens (requires auth sessions) |
-| **v2.5** | pgvector embeddings for semantic similarity search across product descriptions |
-| **v3** | Migration under `/lighting/` in the `atlantiskb-home` monorepo |
+| v2 | Clerk authentication, multi-tenant projects, client-facing submittal portal |
+| v2 | Redis-backed rate limiting, strict CSP, CSRF tokens |
+| v2.5 | pgvector embeddings for semantic product similarity search |
+| v3 | Migration under `/lighting/` in the `atlantiskb-home` monorepo |
