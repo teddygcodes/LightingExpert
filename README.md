@@ -84,12 +84,13 @@ Crawlers and extraction scripts are standalone `ts-node` processes — not API r
 | Auth | Clerk (optional — gracefully bypassed when env vars unset) |
 | Styling | Tailwind CSS 4 + CSS custom properties design system |
 | Icons | lucide-react |
+| Testing | Vitest (unit tests) |
 
 ---
 
 ## Data Model
 
-Eight models, seven enums. Core relationships:
+Eleven models, thirteen enums. Core relationships:
 
 ```
 Manufacturer ──< Category (hierarchical tree per manufacturer)
@@ -102,6 +103,8 @@ Product ──< SubmittalItem ──> Submittal
 Product ──> OrderingMatrix (optional, for part number configuration)
 
 Chat ──> ChatProject (optional grouping)
+
+CompanyBranding (singleton — company logo, contact info, preparedBy details)
 ```
 
 ### Key Design Decisions
@@ -115,6 +118,8 @@ Chat ──> ChatProject (optional grouping)
 **Range columns.** Many fixtures ship in wattage-selectable or lumen-selectable configurations. The schema carries both nominal values (`wattage`, `lumens`) and range columns (`wattageMin/Max`, `lumensMin/Max`) so the cross-reference engine can do range-overlap scoring instead of brittle point comparisons.
 
 **Hard rejects before scoring.** The cross-reference engine applies binary pass/fail rules (voltage, mounting, environment, CCT, form factor) before computing weighted scores. This prevents wasting compute on obviously incompatible fixtures and keeps the scored result set meaningful.
+
+**Company branding.** A singleton `CompanyBranding` record stores company logo (base64), address, phone, email, website, and preparedBy details. This data is pulled into every submittal PDF cover sheet, ensuring consistent branding across all generated packages.
 
 ---
 
@@ -184,6 +189,22 @@ Claude Sonnet with five tools, streamed via Vercel AI SDK:
 | `recommend_fixtures` | Given a fixture class and project context, returns ranked candidates |
 
 The agent always calls `search_products` before `cross_reference` — it never guesses catalog numbers. Chat history persists to PostgreSQL with debounced saves. Conversations are trimmed at 20 messages; tool results older than position 10 are stripped to manage token count. Rate limited at 20 requests/IP/minute.
+
+---
+
+## Product Search
+
+The search pipeline (`lib/products-search.ts`) uses a four-tier fallback strategy:
+
+1. **Manufacturer-prefixed search** — If the query starts with a manufacturer name (e.g., "elite HH6"), splits into manufacturer filter + catalog/family prefix match across three buckets: exact catalog prefix, family name prefix, and display name prefix.
+
+2. **Full-text search** — PostgreSQL `tsvector` with `plainto_tsquery` and `ts_rank` scoring. Handles multi-word queries and stemming.
+
+3. **Fuzzy fallback** — `pg_trgm` `word_similarity` for typo-tolerant matching (e.g., "lithonya" finds "Lithonia"). Kicks in only when tsvector returns zero results.
+
+4. **Structured filter query** — Pure filter-based fallback (manufacturer, category, fixture type, voltage, CCT, etc.) when no text query is provided or all text strategies fail.
+
+All tiers support the same structured filters: manufacturer, category (with descendant inclusion), fixture type, min/max lumens/wattage, CCT, CRI, environment, DLC status, wet location, and voltage (with compatibility expansion — e.g., V277 also matches V120_277 and UNIVERSAL).
 
 ---
 
@@ -258,6 +279,29 @@ npm run extract-matrices
 
 ---
 
+## Testing
+
+Unit tests use [Vitest](https://vitest.dev/) with 271 specs across 6 test files:
+
+| Test file | Coverage | Specs |
+|---|---|---|
+| `parser.test.ts` | Regex extraction, confidence scoring, field validation | 82 |
+| `normalize.test.ts` | Voltage, dimming, mounting, form factor normalization | 55 |
+| `configurator.test.ts` | Catalog string building, parsing, matrix validation | 46 |
+| `validations.test.ts` | Zod schemas for all API inputs | 41 |
+| `cross-reference.test.ts` | Hard rejects, scoring, match classification | 40 |
+| `rate-limit.test.ts` | Per-IP rate limiting, window reset | 7 |
+
+```bash
+# Run all tests
+npm run test
+
+# Watch mode
+npm run test:watch
+```
+
+---
+
 ## Environment Variables
 
 | Variable | Required | Description |
@@ -280,17 +324,26 @@ When Clerk env vars are unset, authentication is bypassed entirely. A warning is
 | `npm run dev` | Start dev server (Turbopack) |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
+| `npm run test` | Run Vitest unit tests |
+| `npm run test:watch` | Run tests in watch mode |
 | `npm run crawl` | Playwright crawler (all manufacturers) |
 | `npm run crawl:acuity` | Crawl Acuity Brands |
 | `npm run crawl:cooper` | Crawl Cooper Lighting |
 | `npm run crawl:current` | Crawl Current Lighting |
 | `npm run crawl:lutron` | Crawl Lutron |
-| `npm run extract-specs` | 10x concurrent PDF spec extraction |
+| `npm run extract-specs` | PDF spec extraction via Claude |
 | `npm run promote-specs` | Promote staged extractions to live columns |
 | `npm run classify` | Rule-based fixture classification |
 | `npm run classify:ai` | AI-assisted classification |
 | `npm run extract-matrices` | Extract ordering matrices from spec sheets |
+| `npm run backfill:acuity-pdfs` | Backfill missing Acuity spec sheet PDFs |
+| `npm run backfill:acuity-thumbs` | Backfill missing Acuity thumbnails |
+| `npm run backfill:cooper-thumbs` | Backfill missing Cooper thumbnails |
+| `npm run backfill:elite-thumbs` | Backfill missing Elite thumbnails |
+| `npm run backfill:current-thumbs` | Backfill missing Current thumbnails |
 | `npm run db:migrate` | Create + apply Prisma migration |
+| `npm run db:migrate:deploy` | Deploy pending migrations (CI/production) |
+| `npm run db:push` | Push schema changes without migration |
 | `npm run db:seed` | Seed manufacturers + root categories |
 | `npm run db:studio` | Open Prisma Studio |
 
