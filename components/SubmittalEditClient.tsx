@@ -353,7 +353,7 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
             placeholder={field === 'catalogNumberOverride' ? item.product.catalogNumber : undefined}
             style={{
               ...inputStyle,
-              fontFamily: isMonospace ? 'monospace' : 'inherit',
+              fontFamily: isMonospace ? 'var(--font-mono)' : 'inherit',
               border: cellBorder,
             }}
             onChange={e => setCellValues(prev => ({
@@ -380,7 +380,7 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
             }}
           />
           {field === 'catalogNumberOverride' && (
-            <div style={{ fontSize: 10, color: '#888', marginTop: 2, fontFamily: 'monospace' }}>
+            <div style={{ fontSize: 10, color: '#888', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
               orig: {item.product.catalogNumber}
             </div>
           )}
@@ -401,7 +401,7 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
             padding: '6px 8px',
             border: '1px solid #0078d4',
             fontSize: 12,
-            fontFamily: 'monospace',
+            fontFamily: 'var(--font-mono)',
             background: '#f0f4f8',
             whiteSpace: 'nowrap',
           }}
@@ -424,7 +424,7 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
             padding: '6px 8px',
             border: '1px solid #e0e0e0',
             fontSize: 12,
-            fontFamily: 'monospace',
+            fontFamily: 'var(--font-mono)',
             whiteSpace: 'nowrap',
           }}
         >
@@ -461,7 +461,7 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
           border: '1px solid #e0e0e0',
           cursor: 'text',
           fontSize: 12,
-          fontFamily: field === 'catalogNumberOverride' || field === 'fixtureType' ? 'monospace' : 'inherit',
+          fontFamily: field === 'catalogNumberOverride' || field === 'fixtureType' ? 'var(--font-mono)' : 'inherit',
           color: field === 'notes' || field === 'location' ? '#555' : '#1a1a1a',
           position: 'relative',
           whiteSpace: 'nowrap',
@@ -975,7 +975,7 @@ export default function SubmittalEditClient({ initial }: { initial: SubmittalDat
                         onMouseEnter={e => (e.currentTarget.style.background = '#f0f0f0')}
                         onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
                       >
-                        <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{r.catalogNumber}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{r.catalogNumber}</span>
                         <span style={{ color: '#888', marginLeft: 8 }}>{r.displayName ?? r.familyName}</span>
                         <span style={{ color: '#aaa', marginLeft: 8 }}>{r.manufacturer?.name}</span>
                       </div>

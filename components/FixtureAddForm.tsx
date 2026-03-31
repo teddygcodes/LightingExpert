@@ -19,8 +19,8 @@ interface FixtureAddFormProps {
   onAdded: () => void
 }
 
-const inputCls = 'border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border'
-const labelCls = 'text-[11px] font-semibold text-[var(--text-muted)] mb-1 block'
+const inputCls = 'field-input'
+const labelCls = 'field-label'
 
 export default function FixtureAddForm({ submittalId, onAdded }: FixtureAddFormProps) {
   const [searchQuery, setSearchQuery] = useState('')

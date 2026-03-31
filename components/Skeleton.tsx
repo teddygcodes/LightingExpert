@@ -6,7 +6,7 @@
  */
 
 const pulseStyle: React.CSSProperties = {
-  background: 'linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%)',
+  background: 'linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%)',
   backgroundSize: '200% 100%',
   animation: 'skeleton-pulse 1.5s ease-in-out infinite',
 }
@@ -31,8 +31,8 @@ export function SkeletonLine({ width = '100%', height = 14, style }: {
 export function SkeletonCard({ style }: { style?: React.CSSProperties }) {
   return (
     <div style={{
-      background: '#fff',
-      border: '1px solid #e0e0e0',
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
       padding: 16,
       ...style,
     }}>
@@ -45,16 +45,16 @@ export function SkeletonCard({ style }: { style?: React.CSSProperties }) {
 
 export function SkeletonTable({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
   return (
-    <div style={{ border: '1px solid #e0e0e0', background: '#fff' }}>
+    <div style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', gap: 8, padding: '10px 12px', background: '#f3f3f3', borderBottom: '1px solid #e0e0e0' }}>
+      <div style={{ display: 'flex', gap: 8, padding: '10px 12px', background: 'var(--surface-raised)', borderBottom: '1px solid var(--border)' }}>
         {Array.from({ length: cols }).map((_, i) => (
           <SkeletonLine key={i} width={`${100 / cols}%`} height={14} />
         ))}
       </div>
       {/* Rows */}
       {Array.from({ length: rows }).map((_, r) => (
-        <div key={r} style={{ display: 'flex', gap: 8, padding: '10px 12px', borderBottom: '1px solid #f0f0f0' }}>
+        <div key={r} style={{ display: 'flex', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--bg)' }}>
           {Array.from({ length: cols }).map((_, c) => (
             <SkeletonLine key={c} width={`${100 / cols}%`} height={12} />
           ))}
@@ -67,8 +67,8 @@ export function SkeletonTable({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
 export function SkeletonPdf({ style }: { style?: React.CSSProperties }) {
   return (
     <div style={{
-      background: '#f9f9f9',
-      border: '1px solid #e0e0e0',
+      background: 'var(--surface-raised)',
+      border: '1px solid var(--border)',
       padding: 20,
       display: 'flex',
       flexDirection: 'column',

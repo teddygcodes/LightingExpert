@@ -11,90 +11,81 @@ export default async function SubmittalsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Submittals</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-bold m-0">Submittals</h1>
         <Link
           href="/submittals/new"
-          style={{
-            background: COLORS.accent,
-            color: '#fff',
-            padding: '8px 18px',
-            fontSize: 13,
-            fontWeight: 600,
-            textDecoration: 'none',
-          }}
+          className="bg-[var(--accent)] text-white px-[18px] py-2 text-[13px] font-semibold no-underline hover:no-underline"
         >
           + New Submittal
         </Link>
       </div>
 
       {submittals.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: COLORS.textMuted }}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>No submittals yet</div>
-          <div style={{ fontSize: 13, marginBottom: 20 }}>Create a submittal package to generate PDF documents for your lighting project.</div>
+        <div className="text-center py-[60px] px-5 text-[var(--text-muted)]">
+          <div className="font-semibold mb-2">No submittals yet</div>
+          <div className="text-[13px] mb-5">Create a submittal package to generate PDF documents for your lighting project.</div>
           <Link
             href="/submittals/new"
-            style={{ color: COLORS.accent, textDecoration: 'none', fontWeight: 600 }}
+            className="text-[var(--accent)] font-semibold"
           >
             Create your first submittal →
           </Link>
         </div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: COLORS.text, color: '#fff' }}>
-              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Project Name</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Project #</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Revision</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Status</th>
-              <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Fixtures</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Updated</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>PDF</th>
-              <th style={{ padding: '8px 12px', width: 32 }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {submittals.map((s, i) => (
-              <tr key={s.id} style={{ background: i % 2 === 0 ? '#f9f9f9' : '#fff', borderBottom: '1px solid #e0e0e0' }}>
-                <td style={{ padding: '8px 12px' }}>
-                  <Link href={`/submittals/${s.id}`} style={{ color: COLORS.accent, textDecoration: 'none', fontWeight: 600 }}>
-                    {s.projectName}
-                  </Link>
-                </td>
-                <td style={{ padding: '8px 12px', color: COLORS.textMuted }}>{s.projectNumber ?? '—'}</td>
-                <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: 12 }}>{s.revision ?? 'Rev 0'}</td>
-                <td style={{ padding: '8px 12px' }}>
-                  <span style={{
-                    display: 'inline-block',
-                    padding: '2px 8px',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    background: SUBMITTAL_STATUS_COLOR[s.status] || COLORS.textMuted,
-                    color: '#fff',
-                  }}>
-                    {s.status.replace(/_/g, ' ')}
-                  </span>
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'center' }}>{s._count.items}</td>
-                <td style={{ padding: '8px 12px', color: COLORS.textMuted, fontSize: 12 }}>
-                  {new Date(s.updatedAt).toLocaleDateString()}
-                </td>
-                <td style={{ padding: '8px 12px' }}>
-                  {s.pdfUrl ? (
-                    <a href={s.pdfUrl} target="_blank" rel="noopener noreferrer" style={{ color: COLORS.blue, fontSize: 12 }}>
-                      Download ↗
-                    </a>
-                  ) : (
-                    <span style={{ color: '#aaa', fontSize: 12 }}>Not generated</span>
-                  )}
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                  <DeleteSubmittalButton id={s.id} name={s.projectName} />
-                </td>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Project Name</th>
+                <th>Project #</th>
+                <th>Revision</th>
+                <th>Status</th>
+                <th className="text-center">Fixtures</th>
+                <th>Updated</th>
+                <th>PDF</th>
+                <th style={{ width: 32 }}></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {submittals.map((s) => (
+                <tr key={s.id}>
+                  <td>
+                    <Link href={`/submittals/${s.id}`} className="text-[var(--accent)] font-semibold">
+                      {s.projectName}
+                    </Link>
+                  </td>
+                  <td className="text-[var(--text-muted)]">{s.projectNumber ?? '—'}</td>
+                  <td className="font-[family-name:var(--font-mono)] text-xs">{s.revision ?? 'Rev 0'}</td>
+                  <td>
+                    <span
+                      className="inline-block px-2 py-0.5 text-[11px] font-semibold text-white"
+                      style={{ background: SUBMITTAL_STATUS_COLOR[s.status] || COLORS.textMuted }}
+                    >
+                      {s.status.replace(/_/g, ' ')}
+                    </span>
+                  </td>
+                  <td className="text-center">{s._count.items}</td>
+                  <td className="text-[var(--text-muted)] text-xs">
+                    {new Date(s.updatedAt).toLocaleDateString()}
+                  </td>
+                  <td>
+                    {s.pdfUrl ? (
+                      <a href={s.pdfUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--blue,#0078d4)] text-xs">
+                        Download ↗
+                      </a>
+                    ) : (
+                      <span className="text-[var(--text-faint)] text-xs">Not generated</span>
+                    )}
+                  </td>
+                  <td className="text-center">
+                    <DeleteSubmittalButton id={s.id} name={s.projectName} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

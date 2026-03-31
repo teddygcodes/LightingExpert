@@ -186,11 +186,11 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                   onClick={() => setExpanded(isExpanded ? null : m.id)}
                 >
                   <td style={tdStyle}>{m.manufacturer.name}</td>
-                  <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 600 }}>
+                  <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
                     {m.familyName}
                     {matrixTypePill(m.matrixType)}
                   </td>
-                  <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{m.baseFamily}</td>
+                  <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)' }}>{m.baseFamily}</td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>{getSizeLabel(m)}</td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>{suffs}</td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>{m._count.products}</td>
@@ -198,7 +198,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                     {Math.round(m.confidence * 100)}%
                   </td>
                   <td style={{ ...tdStyle, fontSize: 11 }}>{m.extractionSource}</td>
-                  <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 11 }}>{m.sampleNumber ?? '—'}</td>
+                  <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 11 }}>{m.sampleNumber ?? '—'}</td>
                   <td style={{ ...tdStyle }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button
@@ -227,7 +227,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                                 value={editSkuTable}
                                 onChange={e => setEditSkuTable(e.target.value)}
                                 rows={16}
-                                style={{ width: '100%', fontFamily: 'monospace', fontSize: 11, border: '1px solid #ccc', padding: 8, boxSizing: 'border-box', resize: 'vertical' }}
+                                style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: 11, border: '1px solid #ccc', padding: 8, boxSizing: 'border-box', resize: 'vertical' }}
                               />
                             </div>
                           ) : (
@@ -239,7 +239,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                                     value={editColumns}
                                     onChange={e => setEditColumns(e.target.value)}
                                     rows={12}
-                                    style={{ width: '100%', fontFamily: 'monospace', fontSize: 11, border: '1px solid #ccc', padding: 8, boxSizing: 'border-box', resize: 'vertical' }}
+                                    style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: 11, border: '1px solid #ccc', padding: 8, boxSizing: 'border-box', resize: 'vertical' }}
                                   />
                                 </div>
                                 <div>
@@ -248,7 +248,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                                     value={editSuffixes}
                                     onChange={e => setEditSuffixes(e.target.value)}
                                     rows={12}
-                                    style={{ width: '100%', fontFamily: 'monospace', fontSize: 11, border: '1px solid #ccc', padding: 8, boxSizing: 'border-box', resize: 'vertical' }}
+                                    style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: 11, border: '1px solid #ccc', padding: 8, boxSizing: 'border-box', resize: 'vertical' }}
                                   />
                                 </div>
                               </div>
@@ -259,7 +259,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                                     value={editSkuTable}
                                     onChange={e => setEditSkuTable(e.target.value)}
                                     rows={12}
-                                    style={{ width: '100%', fontFamily: 'monospace', fontSize: 11, border: '1px solid #ccc', padding: 8, boxSizing: 'border-box', resize: 'vertical' }}
+                                    style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: 11, border: '1px solid #ccc', padding: 8, boxSizing: 'border-box', resize: 'vertical' }}
                                   />
                                 </div>
                               )}
@@ -271,7 +271,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                             <input
                               value={editSample}
                               onChange={e => setEditSample(e.target.value)}
-                              style={{ fontFamily: 'monospace', fontSize: 12, border: '1px solid #ccc', padding: '4px 8px', width: 300 }}
+                              style={{ fontFamily: 'var(--font-mono)', fontSize: 12, border: '1px solid #ccc', padding: '4px 8px', width: 300 }}
                             />
                           </div>
                           {editError && <div style={{ color: '#d13438', fontSize: 12, marginBottom: 10 }}>{editError}</div>}
@@ -305,7 +305,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                                 <tbody>
                                   {sortedSkuEntries.map((entry, i) => (
                                     <tr key={i} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                                      <td style={{ fontFamily: 'monospace', fontWeight: 600, padding: '4px 6px', border: '1px solid #e8e8e8' }}>{entry.stockPartNumber}</td>
+                                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, padding: '4px 6px', border: '1px solid #e8e8e8' }}>{entry.stockPartNumber}</td>
                                       <td style={{ padding: '4px 6px', border: '1px solid #e8e8e8' }}>{entry.lumens ?? '—'}</td>
                                       <td style={{ padding: '4px 6px', border: '1px solid #e8e8e8' }}>{entry.watts ?? '—'}</td>
                                       <td style={{ padding: '4px 6px', border: '1px solid #e8e8e8' }}>{entry.cct ?? '—'}</td>
@@ -337,7 +337,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                                     </div>
                                     {col.options.map(opt => (
                                       <div key={opt.code} style={{ fontSize: 11, marginBottom: 2 }}>
-                                        <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#d13438' }}>{opt.code}</span>
+                                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#d13438' }}>{opt.code}</span>
                                         {' '}— {opt.description}
                                         {opt.constraints && opt.constraints.length > 0 && (
                                           <span style={{ color: '#f7a600', marginLeft: 4 }}>&#9888;</span>
@@ -353,7 +353,7 @@ export default function MatricesClient({ matrices: initial }: { matrices: Matrix
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                     {(m.suffixOptions as Array<{ code: string; description: string }>).map(s => (
                                       <div key={s.code} style={{ background: '#fff', border: '1px solid #e0e0e0', padding: '4px 10px', fontSize: 11 }}>
-                                        <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{s.code}</span> — {s.description}
+                                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{s.code}</span> — {s.description}
                                       </div>
                                     ))}
                                   </div>

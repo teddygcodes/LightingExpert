@@ -50,28 +50,28 @@ export default function ProjectInfoPanel({
         <div className="px-4 pb-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">PROJECT NAME *</label>
-              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.projectName} onChange={e => setData({ ...data, projectName: e.target.value })} />
+              <label className="field-label">PROJECT NAME *</label>
+              <input className="field-input" value={data.projectName} onChange={e => setData({ ...data, projectName: e.target.value })} />
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">PROJECT NUMBER</label>
-              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.projectNumber ?? ''} onChange={e => setData({ ...data, projectNumber: e.target.value })} />
+              <label className="field-label">PROJECT NUMBER</label>
+              <input className="field-input" value={data.projectNumber ?? ''} onChange={e => setData({ ...data, projectNumber: e.target.value })} />
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">PREPARED BY</label>
-              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.preparedBy ?? ''} onChange={e => setData({ ...data, preparedBy: e.target.value })} />
+              <label className="field-label">PREPARED BY</label>
+              <input className="field-input" value={data.preparedBy ?? ''} onChange={e => setData({ ...data, preparedBy: e.target.value })} />
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">PREPARED FOR</label>
-              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.preparedFor ?? ''} onChange={e => setData({ ...data, preparedFor: e.target.value })} />
+              <label className="field-label">PREPARED FOR</label>
+              <input className="field-input" value={data.preparedFor ?? ''} onChange={e => setData({ ...data, preparedFor: e.target.value })} />
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">REVISION</label>
-              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.revision ?? ''} onChange={e => setData({ ...data, revision: e.target.value })} placeholder="Rev 0" />
+              <label className="field-label">REVISION</label>
+              <input className="field-input" value={data.revision ?? ''} onChange={e => setData({ ...data, revision: e.target.value })} placeholder="Rev 0" />
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-[var(--text-muted)] mb-1 block">NOTES</label>
-              <input className="border border-[var(--border-strong)] px-2.5 py-1.5 text-[13px] w-full box-border" value={data.notes ?? ''} onChange={e => setData({ ...data, notes: e.target.value })} />
+              <label className="field-label">NOTES</label>
+              <input className="field-input" value={data.notes ?? ''} onChange={e => setData({ ...data, notes: e.target.value })} />
             </div>
           </div>
           <div className="mt-3.5">

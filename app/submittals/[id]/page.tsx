@@ -27,14 +27,14 @@ export default async function SubmittalDetailPage({
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <Link href="/submittals" style={{ fontSize: 13, color: '#6b6b6b', textDecoration: 'none' }}>
+        <Link href="/submittals" style={{ fontSize: 13, color: 'var(--text-muted)', textDecoration: 'none' }}>
           ← Back to Submittals
         </Link>
       </div>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 4px 0' }}>{submittal.projectName}</h1>
         {submittal.projectNumber && (
-          <div style={{ fontSize: 13, color: '#6b6b6b' }}>Project # {submittal.projectNumber}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Project # {submittal.projectNumber}</div>
         )}
       </div>
       <SubmittalDetailClient initial={JSON.parse(JSON.stringify(submittal))} />

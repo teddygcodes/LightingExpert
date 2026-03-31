@@ -32,7 +32,7 @@ export default function CategoryCard({
       <div className="flex justify-between items-start">
         <span className="font-semibold text-sm text-[var(--text)]">{cat.name}</span>
         <div className="flex items-center gap-2 shrink-0 ml-3">
-          <span className="text-[11px] bg-[#fde7e9] text-[var(--accent)] px-2 py-0.5 font-semibold">
+          <span className="text-[11px] bg-[var(--accent-dim)] text-[var(--accent)] px-2 py-0.5 font-semibold">
             {hasChildren ? `${cat.childCategoryCount} sub` : cat.directProductCount}
           </span>
           {hasChildren && <span className="text-[var(--text-faint)] text-sm">›</span>}

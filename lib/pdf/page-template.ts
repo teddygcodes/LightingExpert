@@ -3,7 +3,7 @@ import { MARGINS, HEADER_FOOTER, PDF_COLORS } from './layout-constants'
 
 const { SIDE } = MARGINS
 const { HEADER_Y_FROM_TOP, FOOTER_Y_BASELINE, FOOTER_RULE_Y, DARK_BAR_HEIGHT } = HEADER_FOOTER
-const { BLACK, WHITE, GRAY, RULE: RULE_COLOR, DARK_BAR } = PDF_COLORS
+const { BLACK, WHITE, GRAY, RULE: RULE_COLOR, DARK_BAR, ACCENT } = PDF_COLORS
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 1) + '…' : s
@@ -40,11 +40,20 @@ export function addHeaderFooter(
       color: DARK_BAR,
     })
 
+    // Red accent strip at bottom of dark bar
+    page.drawRectangle({
+      x: 0,
+      y: barY,
+      width,
+      height: 2,
+      color: ACCENT,
+    })
+
     // Project name — far left, 9pt regular white
     const projectText = truncate(opts.projectName, 50)
     page.drawText(projectText, {
       x: SIDE,
-      y: barY + (DARK_BAR_HEIGHT - 9) / 2,
+      y: barY + (DARK_BAR_HEIGHT - 9) / 2 + 1,
       font: regular,
       size: 9,
       color: WHITE,
@@ -54,8 +63,8 @@ export function addHeaderFooter(
     if (opts.fixtureType) {
       const typeText = opts.fixtureType
       const typeWidth = bold.widthOfTextAtSize(typeText, 18)
-      const typeX = width - SIDE_MARGIN - typeWidth
-      const typeY = barY + (DARK_BAR_HEIGHT - 18) / 2
+      const typeX = width - SIDE - typeWidth
+      const typeY = barY + (DARK_BAR_HEIGHT - 18) / 2 + 1
       page.drawText(typeText, {
         x: typeX,
         y: typeY,
@@ -68,10 +77,10 @@ export function addHeaderFooter(
       if (opts.catalogString) {
         const catText = truncate(opts.catalogString, 50)
         const catWidth = regular.widthOfTextAtSize(catText, 11)
-        const catX = typeX - catWidth - 8  // 8pt gap
+        const catX = typeX - catWidth - 8
         page.drawText(catText, {
           x: catX,
-          y: barY + (DARK_BAR_HEIGHT - 11) / 2,
+          y: barY + (DARK_BAR_HEIGHT - 11) / 2 + 1,
           font: regular,
           size: 11,
           color: WHITE,
@@ -105,25 +114,31 @@ export function addHeaderFooter(
       })
     }
 
+    // Accent-tinted rule below header
     page.drawLine({
-      start: { x: SIDE_MARGIN, y: headerY - 8 },
-      end: { x: width - SIDE_MARGIN, y: headerY - 8 },
+      start: { x: SIDE, y: headerY - 8 },
+      end: { x: width - SIDE, y: headerY - 8 },
       thickness: 0.5,
       color: RULE_COLOR,
+    })
+    // Small red accent dash at left edge of header rule
+    page.drawRectangle({
+      x: SIDE, y: headerY - 9, width: 24, height: 2,
+      color: ACCENT,
     })
   }
 
   // ── Footer (both styles) ──────────────────────────────────────────
   page.drawLine({
-    start: { x: SIDE_MARGIN, y: FOOTER_RULE_Y },
-    end: { x: width - SIDE_MARGIN, y: FOOTER_RULE_Y },
+    start: { x: SIDE, y: FOOTER_RULE_Y },
+    end: { x: width - SIDE, y: FOOTER_RULE_Y },
     thickness: 0.5,
     color: RULE_COLOR,
   })
 
   const revStr = String(opts.revisionNumber).padStart(2, '0')
   page.drawText(`Lighting Submittal — Rev ${revStr} — ${opts.date}`, {
-    x: SIDE_MARGIN,
+    x: SIDE,
     y: FOOTER_Y_BASELINE,
     font: regular,
     size: 8,
@@ -133,7 +148,7 @@ export function addHeaderFooter(
   const pageStr = `Page ${opts.displayPageNumber} of ${opts.displayTotalPages}`
   const pageStrWidth = regular.widthOfTextAtSize(pageStr, 8)
   page.drawText(pageStr, {
-    x: width - SIDE_MARGIN - pageStrWidth,
+    x: width - SIDE - pageStrWidth,
     y: FOOTER_Y_BASELINE,
     font: regular,
     size: 8,

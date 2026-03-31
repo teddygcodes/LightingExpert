@@ -202,7 +202,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 2 }}>
-            <span style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>
               {catalogNumber}
             </span>
             <span style={{ fontSize: 13, color: '#888' }}>

@@ -23,6 +23,14 @@ export const COLORS = {
   orange: '#ff8c00',
 } as const
 
+// ─── Shadows ─────────────────────────────────────────────────────────────────
+
+export const SHADOWS = {
+  sm: '0 1px 2px rgba(0,0,0,0.05)',
+  md: '0 2px 8px rgba(0,0,0,0.08)',
+  lg: '0 4px 16px rgba(0,0,0,0.10)',
+} as const
+
 // ─── Status Colors ───────────────────────────────────────────────────────────
 
 /** Submittal status → badge background color */

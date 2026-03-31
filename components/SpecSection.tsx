@@ -35,9 +35,8 @@ export default function SpecSection({ title, rows }: SpecSectionProps) {
   return (
     <div
       style={{
-        background: '#fff',
-        border: '1px solid #e8e8e8',
-        borderRadius: 6,
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
         padding: '14px 16px',
       }}
     >
@@ -47,7 +46,7 @@ export default function SpecSection({ title, rows }: SpecSectionProps) {
           fontWeight: 600,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
-          color: '#999',
+          color: 'var(--text-faint)',
           marginBottom: 10,
         }}
       >
@@ -68,10 +67,10 @@ export default function SpecSection({ title, rows }: SpecSectionProps) {
                 lineHeight: '1.4',
               }}
             >
-              <span style={{ color: '#888', flexShrink: 0 }}>{row.label}</span>
+              <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{row.label}</span>
               <span
                 style={{
-                  color: '#1a1a1a',
+                  color: 'var(--text)',
                   fontWeight: 500,
                   textAlign: 'right',
                   wordBreak: 'break-word',

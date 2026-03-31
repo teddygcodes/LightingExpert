@@ -49,7 +49,7 @@ function CrossReferenceResult({
       <span style={{ fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 10 }}>
         Source fixture
       </span>
-      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>
         {result.source.catalogNumber}
       </span>
       <span style={{ color: 'var(--text-faint)' }}>
@@ -86,7 +86,7 @@ function CrossReferenceResult({
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.02em' }}>
+                    <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', fontSize: 13, letterSpacing: '0.02em' }}>
                       {m.catalogNumber}
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>
@@ -179,7 +179,7 @@ function CrossReferenceResult({
         >
           <div style={{ position: 'relative', flex: 1, margin: '32px', background: '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
                 {activeSpec.catalog}
               </span>
               <button
@@ -229,7 +229,7 @@ function DisambigList({
         >
           <div style={{ position: 'relative', flex: 1, margin: '32px', background: '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
                 {activeSpec.catalog}
               </span>
               <button
@@ -268,7 +268,7 @@ function DisambigList({
               onMouseEnter={(e) => { if (onSelectProduct) (e.currentTarget as HTMLDivElement).style.opacity = '0.75' }}
               onMouseLeave={(e) => { if (onSelectProduct) (e.currentTarget as HTMLDivElement).style.opacity = '1' }}
             >
-              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
                 {p.catalogNumber}
               </span>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -587,7 +587,7 @@ function ToolResultRenderer({
           </div>
           <div style={{ flex: 1, minWidth: 0, padding: '10px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.02em', color: 'var(--text)' }}>
+              <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', fontSize: 13, letterSpacing: '0.02em', color: 'var(--text)' }}>
                 {r.catalogNumber}
               </span>
               <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -651,7 +651,7 @@ function ToolResultRenderer({
           <path d="M2 6.5l3 3L11 3" stroke="#15803d" strokeWidth="2" strokeLinecap="square"/>
         </svg>
         <span>
-          Added <strong style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.catalogNumber}</strong>{' '}
+          Added <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{r.catalogNumber}</strong>{' '}
           Type <strong>{r.fixtureType}</strong> ×{r.quantity} →{' '}
           <a href={`/submittals/${r.submittalId}`} style={{ color: 'var(--accent)', fontWeight: 500 }}>
             {r.submittalName}
@@ -759,7 +759,7 @@ const markdownComponents = {
     <strong style={{ fontWeight: 600, color: 'var(--text)' }}>{children}</strong>
   ),
   code: ({ children }: { children?: React.ReactNode }) => (
-    <code style={{ fontFamily: 'monospace', background: 'var(--bg)', border: '1px solid var(--border)', padding: '1px 5px', fontSize: 12 }}>
+    <code style={{ fontFamily: 'var(--font-mono)', background: 'var(--bg)', border: '1px solid var(--border)', padding: '1px 5px', fontSize: 12 }}>
       {children}
     </code>
   ),

@@ -10,17 +10,17 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   return (
     <div style={{ padding: '60px 40px', textAlign: 'center' }}>
       <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Something went wrong</div>
-      <div style={{ fontSize: 13, color: '#6b6b6b', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
         An unexpected error occurred. Please try again.
       </div>
       {error.digest && (
-        <div style={{ fontSize: 11, color: '#999', marginBottom: 16, fontFamily: 'monospace' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 16, fontFamily: 'var(--font-mono)' }}>
           Error ID: {error.digest}
         </div>
       )}
       <button
         onClick={reset}
-        style={{ background: '#d13438', color: '#fff', border: 'none', padding: '9px 20px', fontSize: 13, cursor: 'pointer' }}
+        style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '9px 20px', fontSize: 13, cursor: 'pointer' }}
       >
         Try Again
       </button>

@@ -152,7 +152,7 @@ export default function AddToSubmittalDialog({ product, onClose, onAdded }: Prop
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Add to Submittal</div>
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
-              <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{product.catalogNumber}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{product.catalogNumber}</span>
               {product.displayName && (
                 <span style={{ marginLeft: 6 }}>— {product.displayName}</span>
               )}
@@ -176,7 +176,7 @@ export default function AddToSubmittalDialog({ product, onClose, onAdded }: Prop
               padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--border)',
             }}>
               <div>
-                <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: 'var(--text)', letterSpacing: '0.02em' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 13, color: 'var(--text)', letterSpacing: '0.02em' }}>
                   {catalogOverride}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
@@ -211,7 +211,7 @@ export default function AddToSubmittalDialog({ product, onClose, onAdded }: Prop
               />
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
                 Will add:{' '}
-                <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
                   {catalogOverride || product.catalogNumber}
                 </span>
                 {!catalogOverride && ' (base)'}
@@ -233,7 +233,7 @@ export default function AddToSubmittalDialog({ product, onClose, onAdded }: Prop
           {lettersInUse.length > 0 && (
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
               In use on this submittal:{' '}
-              <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
                 {lettersInUse.join(', ')}
               </span>
             </div>

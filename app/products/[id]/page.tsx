@@ -18,7 +18,7 @@ export default async function ProductDetailPage({
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <Link href="/products" style={{ fontSize: 13, color: '#6b6b6b', textDecoration: 'none' }}>
+        <Link href="/products" style={{ fontSize: 13, color: 'var(--text-muted)', textDecoration: 'none' }}>
           ← Back to Products
         </Link>
       </div>

@@ -10,12 +10,12 @@ export default function CrossReferenceError({ error, reset }: { error: Error & {
   return (
     <div style={{ padding: '60px 40px', textAlign: 'center' }}>
       <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Failed to load cross-reference</div>
-      <div style={{ fontSize: 13, color: '#6b6b6b', marginBottom: 20 }}>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
         An error occurred while loading the cross-reference tool. Please try again.
       </div>
       <button
         onClick={reset}
-        style={{ background: '#d13438', color: '#fff', border: 'none', padding: '9px 20px', fontSize: 13, cursor: 'pointer' }}
+        style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '9px 20px', fontSize: 13, cursor: 'pointer' }}
       >
         Try Again
       </button>

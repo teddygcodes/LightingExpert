@@ -19,84 +19,89 @@ export default async function AdminPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24 }}>Admin</h1>
+      <h1 className="text-xl font-bold mb-6">Admin</h1>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
+      <div className="grid grid-cols-3 gap-4 mb-8">
         {[
           { label: 'Total Products', value: productCount },
           { label: 'Manufacturers', value: manufacturerCount },
           { label: 'Crawl Runs', value: logs.length },
         ].map(stat => (
-          <div key={stat.label} style={{ background: '#fff', border: '1px solid #e0e0e0', padding: '16px 20px' }}>
-            <div style={{ fontSize: 28, fontWeight: 700, color: COLORS.accent }}>{stat.value}</div>
-            <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 4 }}>{stat.label}</div>
+          <div key={stat.label} className="bg-white border border-[var(--border)] px-5 py-4">
+            <div className="text-[28px] font-bold text-[var(--accent)]">{stat.value}</div>
+            <div className="text-xs text-[var(--text-muted)] mt-1">{stat.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Crawl trigger */}
-      <div style={{ background: '#fff', border: '1px solid #e0e0e0', padding: 20, marginBottom: 24 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Crawler</div>
-        <div style={{ fontSize: 12, color: COLORS.textMuted, marginBottom: 12 }}>
+      {/* Crawler */}
+      <div className="bg-white border border-[var(--border)] p-5 mb-6">
+        <div className="text-[13px] font-bold mb-2">Crawler</div>
+        <div className="text-xs text-[var(--text-muted)] mb-3">
           The crawler runs as a standalone Node.js script. To start a crawl, run the following command in your terminal:
         </div>
-        <pre style={{ background: '#f3f3f3', padding: '10px 14px', fontSize: 12, fontFamily: 'monospace', border: '1px solid #e0e0e0' }}>
+        <pre className="bg-[var(--surface-raised)] border border-[var(--border)] px-3.5 py-2.5 text-xs" style={{ fontFamily: 'var(--font-mono)' }}>
           npm run crawl
         </pre>
-        <div style={{ fontSize: 11, color: '#aaa', marginTop: 8 }}>
-          Optional: <code>npm run crawl -- --categories=FLAT_PANEL,DOWNLIGHT</code>
+        <div className="text-[11px] text-[var(--text-faint)] mt-2">
+          Optional: <code style={{ fontFamily: 'var(--font-mono)' }}>npm run crawl -- --categories=FLAT_PANEL,DOWNLIGHT</code>
         </div>
       </div>
 
       {/* Crawl log table */}
-      <div style={{ background: '#fff', border: '1px solid #e0e0e0' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e0e0e0', fontSize: 13, fontWeight: 700 }}>
+      <div className="bg-white border border-[var(--border)]">
+        <div className="px-4 py-3 border-b border-[var(--border)] text-[13px] font-bold">
           Crawl History
         </div>
         {logs.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: COLORS.textMuted, fontSize: 13 }}>
-            No crawl runs yet. Run <code>npm run crawl</code> to start.
+          <div className="p-10 text-center text-[var(--text-muted)] text-[13px]">
+            No crawl runs yet. Run <code style={{ fontFamily: 'var(--font-mono)' }}>npm run crawl</code> to start.
           </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
-              <tr style={{ background: '#f3f3f3', borderBottom: '1px solid #e0e0e0' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Started</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Manufacturer</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Status</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Found</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Parsed</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Failed</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>Duration</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Error</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map((log, i) => (
-                <tr key={log.id} style={{ background: i % 2 === 0 ? '#fff' : '#f9f9f9', borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '8px 12px', color: COLORS.textMuted }}>
-                    {new Date(log.startedAt).toLocaleString()}
-                  </td>
-                  <td style={{ padding: '8px 12px' }}>{log.manufacturer?.name ?? '—'}</td>
-                  <td style={{ padding: '8px 12px' }}>
-                    <span style={{ padding: '2px 8px', fontSize: 11, fontWeight: 600, background: CRAWL_STATUS_COLOR[log.status] || COLORS.textMuted, color: '#fff' }}>
-                      {log.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>{log.productsFound}</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', color: COLORS.green }}>{log.productsNew + log.productsUpdated}</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', color: log.parseFailures > 0 ? COLORS.accent : COLORS.textMuted }}>{log.parseFailures}</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
-                    {duration(log.startedAt, log.completedAt)}
-                  </td>
-                  <td style={{ padding: '8px 12px', color: COLORS.accent, fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {log.errors ? JSON.stringify(log.errors).slice(0, 60) : ''}
-                  </td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Started</th>
+                  <th>Manufacturer</th>
+                  <th>Status</th>
+                  <th className="text-center">Found</th>
+                  <th className="text-center">Parsed</th>
+                  <th className="text-center">Failed</th>
+                  <th className="text-right">Duration</th>
+                  <th>Error</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {logs.map((log) => (
+                  <tr key={log.id}>
+                    <td className="text-[var(--text-muted)]">
+                      {new Date(log.startedAt).toLocaleString()}
+                    </td>
+                    <td>{log.manufacturer?.name ?? '—'}</td>
+                    <td>
+                      <span
+                        className="inline-block px-2 py-0.5 text-[11px] font-semibold text-white"
+                        style={{ background: CRAWL_STATUS_COLOR[log.status] || COLORS.textMuted }}
+                      >
+                        {log.status}
+                      </span>
+                    </td>
+                    <td className="text-center">{log.productsFound}</td>
+                    <td className="text-center text-[var(--green,#107c10)]">{log.productsNew + log.productsUpdated}</td>
+                    <td className="text-center" style={{ color: log.parseFailures > 0 ? COLORS.accent : COLORS.textMuted }}>{log.parseFailures}</td>
+                    <td className="text-right" style={{ fontFamily: 'var(--font-mono)' }}>
+                      {duration(log.startedAt, log.completedAt)}
+                    </td>
+                    <td className="text-[var(--accent)] text-[11px] max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">
+                      {log.errors ? JSON.stringify(log.errors).slice(0, 60) : ''}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

@@ -20,13 +20,13 @@ export function DeleteSubmittalButton({ id, name }: { id: string; name: string }
         <button
           onClick={handleDelete}
           disabled={loading}
-          style={{ fontSize: 11, color: '#fff', background: '#d13438', border: 'none', padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}
+          style={{ fontSize: 11, color: '#fff', background: 'var(--accent)', border: 'none', padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}
         >
           {loading ? '…' : 'Delete'}
         </button>
         <button
           onClick={() => setConfirming(false)}
-          style={{ fontSize: 11, color: '#6b6b6b', background: 'none', border: 'none', cursor: 'pointer' }}
+          style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
         >
           Cancel
         </button>
@@ -38,7 +38,7 @@ export function DeleteSubmittalButton({ id, name }: { id: string; name: string }
     <button
       onClick={() => setConfirming(true)}
       title={`Delete "${name}"`}
-      style={{ fontSize: 11, color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+      style={{ fontSize: 11, color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
     >
       ✕
     </button>

@@ -55,11 +55,14 @@ export async function GET(
       LIMIT 1
     `
   } else {
-    return NextResponse.json({ hasMatrix: false })
+    rows = []
   }
 
   // Tier 3: on-demand extraction from rawSpecText when no matrix exists yet
-  if (!rows.length && product.rawSpecText && product.rawSpecText.length >= 200 && product.familyName) {
+  // Derive familyName from catalog number if not set (e.g. "24-FPL1-LED-ML-CCT" → "24-FPL1")
+  const effectiveFamilyForExtraction = product.familyName
+    ?? product.catalogNumber.split('-').slice(0, 2).join('-')
+  if (!rows.length && product.rawSpecText && product.rawSpecText.length >= 200) {
     // Rate limit AI extraction to prevent abuse
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
                req.headers.get('x-real-ip') ?? 'unknown'
@@ -71,7 +74,7 @@ export async function GET(
       // Derive a cleaner family name for the AI prompt when the DB familyName is a generic phrase.
       // e.g. "EPANL Flat Panel" → "EPANL"; fall back to DB familyName if no clean code found.
       const firstWord = (product.displayName ?? '').split(/\s+/)[0] ?? ''
-      const effectiveFamilyName = /^[A-Z0-9]{2,12}$/.test(firstWord) ? firstWord : product.familyName
+      const effectiveFamilyName = /^[A-Z0-9]{2,12}$/.test(firstWord) ? firstWord : effectiveFamilyForExtraction
 
       const extracted = await extractOrderingMatrixFromSpec(
         product.rawSpecText,
@@ -114,8 +117,8 @@ export async function GET(
             "extractedAt"    = NOW()
           RETURNING id`,
           product.manufacturerId,
-          product.familyName,
-          extracted.baseFamily ?? product.familyName,
+          effectiveFamilyForExtraction,
+          extracted.baseFamily ?? effectiveFamilyForExtraction,
           extracted.separator ?? '-',
           extracted.sampleNumber ?? null,
           dbMatrixType,
@@ -127,14 +130,23 @@ export async function GET(
         if (matrixRows.length) {
           const matrixId = matrixRows[0].id
 
-          // Link all active products in this family to the new matrix
-          await prisma.$executeRawUnsafe(
-            `UPDATE "Product" SET "orderingMatrixId" = $1
-             WHERE "manufacturerId" = $2 AND "familyName" = $3 AND "isActive" = true`,
-            matrixId,
-            product.manufacturerId,
-            product.familyName,
-          )
+          // Link this product (and siblings with same familyName, if set) to the new matrix
+          if (product.familyName) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE "Product" SET "orderingMatrixId" = $1
+               WHERE "manufacturerId" = $2 AND "familyName" = $3 AND "isActive" = true`,
+              matrixId,
+              product.manufacturerId,
+              product.familyName,
+            )
+          } else {
+            // No familyName — link just this product
+            await prisma.$executeRawUnsafe(
+              `UPDATE "Product" SET "orderingMatrixId" = $1 WHERE id = $2`,
+              matrixId,
+              product.id,
+            )
+          }
 
           rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
             `SELECT ${MATRIX_COLS} FROM "OrderingMatrix" WHERE id = $1 LIMIT 1`,

@@ -63,7 +63,7 @@ function SkuCard({ entry, isSelected, onSelect }: SkuCardProps) {
           Popular
         </span>
       )}
-      <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#000', marginBottom: 5, paddingRight: entry.isCommon ? 60 : 0 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 13, color: '#000', marginBottom: 5, paddingRight: entry.isCommon ? 60 : 0 }}>
         {entry.stockPartNumber}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -180,7 +180,7 @@ function ColumnBuilder({
                   onChange={() => onToggleSuffix(suf.code)}
                   style={{ margin: 0 }}
                 />
-                <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#d13438' }}>{suf.code}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#d13438' }}>{suf.code}</span>
                 <span style={{ color: '#555' }}>— {suf.description}</span>
                 {suf.notes && <span style={{ color: '#888', fontSize: 11 }}>({suf.notes})</span>}
               </label>
@@ -320,7 +320,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
     border: '1px solid #ccc',
     padding: '4px 6px',
     fontSize: 12,
-    fontFamily: 'monospace',
+    fontFamily: 'var(--font-mono)',
     background: '#fff',
     cursor: 'pointer',
     minWidth: 80,
@@ -382,7 +382,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
 
         <div style={{ marginTop: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: '8px 12px', background: '#1a1a1a', borderRadius: 6, fontSize: 13 }}>
-            <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: selectedSku ? '#fff' : '#888', letterSpacing: '0.05em', flex: 1 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14, color: selectedSku ? '#fff' : '#888', letterSpacing: '0.05em', flex: 1 }}>
               {selectedSku || '—'}
             </span>
           </div>
@@ -467,7 +467,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
             gap: 6,
           }}
         >
-          <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{customBuilderOpen ? '▾' : '▸'}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{customBuilderOpen ? '▾' : '▸'}</span>
           Build custom configuration
         </button>
 
@@ -489,7 +489,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
 
         {/* Preview */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: '8px 12px', background: '#1a1a1a', borderRadius: 6, fontSize: 13 }}>
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: previewValue ? '#fff' : '#888', letterSpacing: '0.05em', flex: 1 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14, color: previewValue ? '#fff' : '#888', letterSpacing: '0.05em', flex: 1 }}>
             {previewValue || '—'}
           </span>
         </div>
@@ -601,7 +601,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
 
       {/* Built catalog string */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: '8px 12px', background: '#1a1a1a', borderRadius: 2 }}>
-        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: result.catalogString ? '#fff' : '#888', letterSpacing: '0.05em', flex: 1 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14, color: result.catalogString ? '#fff' : '#888', letterSpacing: '0.05em', flex: 1 }}>
           {result.catalogString || '—'}
         </span>
         <span style={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', color: result.isComplete ? '#6fcf97' : '#eb5757' }}>
@@ -636,7 +636,7 @@ export default function ProductConfigurator({ productId, currentOverride, onCata
                   onChange={() => toggleSuffix(suf.code)}
                   style={{ margin: 0 }}
                 />
-                <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#d13438' }}>{suf.code}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#d13438' }}>{suf.code}</span>
                 <span style={{ color: '#555' }}>— {suf.description}</span>
                 {suf.notes && <span style={{ color: '#888', fontSize: 11 }}>({suf.notes})</span>}
               </label>

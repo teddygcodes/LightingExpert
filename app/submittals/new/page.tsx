@@ -25,52 +25,43 @@ export default function NewSubmittalPage() {
     router.push(`/submittals/${data.id}`)
   }
 
-  const inputStyle = {
-    border: '1px solid #ccc',
-    padding: '7px 10px',
-    fontSize: 13,
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  }
-  const labelStyle = { fontSize: 11, fontWeight: 600 as const, color: '#6b6b6b', marginBottom: 4, display: 'block' as const }
-
   return (
     <div style={{ maxWidth: 520 }}>
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24 }}>New Submittal</h1>
 
-      <div style={{ background: '#fff', border: '1px solid #e0e0e0', padding: 24 }}>
+      <div className="bg-[var(--surface)] border border-[var(--border)]" style={{ padding: 24 }}>
         <div style={{ display: 'grid', gap: 14 }}>
           <div>
-            <label style={labelStyle}>PROJECT NAME *</label>
-            <input style={inputStyle} value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="e.g. Atlantis KB Office Renovation" autoFocus />
+            <label className="field-label">PROJECT NAME *</label>
+            <input className="field-input" value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="e.g. Atlantis KB Office Renovation" autoFocus />
           </div>
           <div>
-            <label style={labelStyle}>PROJECT NUMBER</label>
-            <input style={inputStyle} value={projectNumber} onChange={e => setProjectNumber(e.target.value)} placeholder="e.g. 2025-001" />
+            <label className="field-label">PROJECT NUMBER</label>
+            <input className="field-input" value={projectNumber} onChange={e => setProjectNumber(e.target.value)} placeholder="e.g. 2025-001" />
           </div>
           <div>
-            <label style={labelStyle}>PREPARED BY</label>
-            <input style={inputStyle} value={preparedBy} onChange={e => setPreparedBy(e.target.value)} placeholder="Your name" />
+            <label className="field-label">PREPARED BY</label>
+            <input className="field-input" value={preparedBy} onChange={e => setPreparedBy(e.target.value)} placeholder="Your name" />
           </div>
           <div>
-            <label style={labelStyle}>PREPARED FOR</label>
-            <input style={inputStyle} value={preparedFor} onChange={e => setPreparedFor(e.target.value)} placeholder="Client name" />
+            <label className="field-label">PREPARED FOR</label>
+            <input className="field-input" value={preparedFor} onChange={e => setPreparedFor(e.target.value)} placeholder="Client name" />
           </div>
         </div>
 
-        {error && <div style={{ color: '#d13438', fontSize: 13, marginTop: 12 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--accent)', fontSize: 13, marginTop: 12 }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button
             onClick={handleCreate}
             disabled={creating}
-            style={{ background: '#d13438', color: '#fff', border: 'none', padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
           >
             {creating ? 'Creating…' : 'Create Submittal →'}
           </button>
           <button
             onClick={() => router.push('/submittals')}
-            style={{ background: 'none', border: '1px solid #ccc', padding: '9px 14px', fontSize: 13, cursor: 'pointer', color: '#6b6b6b' }}
+            style={{ background: 'none', border: '1px solid var(--border-strong)', padding: '9px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--text-muted)' }}
           >
             Cancel
           </button>

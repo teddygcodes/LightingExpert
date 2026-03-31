@@ -107,7 +107,7 @@ export default function CrossReferenceClient() {
             <div style={{ fontSize: 11, color: '#0078d4', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>
               Source Fixture
             </div>
-            <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 16 }}>{result.source.catalogNumber}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 16 }}>{result.source.catalogNumber}</div>
             {result.source.displayName && (
               <div style={{ fontSize: 13, color: '#6b6b6b', marginTop: 2 }}>{result.source.displayName}</div>
             )}

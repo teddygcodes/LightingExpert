@@ -111,7 +111,7 @@ export const updateBrandingSchema = z.object({
   phone: z.string().max(30).nullish(),
   email: z.string().max(200).nullish(),
   website: z.string().max(500).nullish(),
-  logoBase64: z.string().max(2_000_000).nullish(), // ~1.5MB image
+  logoBase64: z.string().max(10_000_000).nullish(), // ~7.5MB image
   logoMimeType: z.enum(['image/png', 'image/jpeg']).nullish(),
   preparedByName: z.string().max(200).nullish(),
   preparedByTitle: z.string().max(200).nullish(),

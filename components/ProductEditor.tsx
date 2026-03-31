@@ -215,7 +215,7 @@ export default function ProductEditor({ product, onSave }: ProductEditorProps) {
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {(product.cctOptions as number[]).map((cct) => (
-                <span key={cct} style={{ background: '#f0f0f0', padding: '3px 10px', fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>
+                <span key={cct} style={{ background: '#f0f0f0', padding: '3px 10px', fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
                   {cct}K
                 </span>
               ))}

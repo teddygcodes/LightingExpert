@@ -85,7 +85,7 @@ export default function ProductInlineCard({ product, onAddToSubmittal }: Props) 
         {/* Info */}
         <div style={{ flex: 1, minWidth: 0, padding: '10px 12px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.02em', color: 'var(--text)' }}>
+            <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', fontSize: 13, letterSpacing: '0.02em', color: 'var(--text)' }}>
               {product.catalogNumber}
             </span>
             <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>

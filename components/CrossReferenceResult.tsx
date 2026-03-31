@@ -14,30 +14,32 @@ function DeltaTable({ snapshot }: { snapshot: ComparisonSnapshot }) {
   const entries = Object.entries(snapshot.deltas)
   if (entries.length === 0) return null
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 8 }}>
-      <thead>
-        <tr style={{ background: '#f3f3f3' }}>
-          <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Field</th>
-          <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Source</th>
-          <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Target</th>
-          <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Delta</th>
-        </tr>
-      </thead>
-      <tbody>
-        {entries.map(([field, delta]) => (
-          <tr key={field} style={{ borderBottom: '1px solid #f0f0f0' }}>
-            <td style={{ padding: '3px 8px', color: '#6b6b6b', textTransform: 'uppercase', fontSize: 11 }}>{field}</td>
-            <td style={{ padding: '3px 8px', fontFamily: 'monospace', fontSize: 11 }}>
-              {String((snapshot.source[field] as string | number | boolean | null) ?? '—')}
-            </td>
-            <td style={{ padding: '3px 8px', fontFamily: 'monospace', fontSize: 11 }}>
-              {String((snapshot.target[field] as string | number | boolean | null) ?? '—')}
-            </td>
-            <td style={{ padding: '3px 8px', fontSize: 11 }}>{delta}</td>
+    <div className="table-wrap mt-2">
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Source</th>
+            <th>Target</th>
+            <th>Delta</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {entries.map(([field, delta]) => (
+            <tr key={field}>
+              <td className="text-[var(--text-muted)] uppercase text-[11px]">{field}</td>
+              <td className="text-[11px]" style={{ fontFamily: 'var(--font-mono)' }}>
+                {String((snapshot.source[field] as string | number | boolean | null) ?? '—')}
+              </td>
+              <td className="text-[11px]" style={{ fontFamily: 'var(--font-mono)' }}>
+                {String((snapshot.target[field] as string | number | boolean | null) ?? '—')}
+              </td>
+              <td className="text-[11px]">{delta}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -46,39 +48,34 @@ export function MatchCard({ match }: MatchCardProps) {
   const pct = Math.round(match.confidence * 100)
 
   return (
-    <div style={{
-      border: `1px solid ${color}`,
-      background: bg,
-      padding: 16,
-      marginBottom: 10,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+    <div className="p-4 mb-2.5" style={{ border: `1px solid ${color}`, background: bg }}>
+      <div className="flex justify-between items-start mb-2">
         <div>
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14 }}>
+          <span className="font-bold text-sm" style={{ fontFamily: 'var(--font-mono)' }}>
             {match.catalogNumber}
           </span>
           {match.displayName && (
-            <span style={{ fontSize: 12, color: '#6b6b6b', marginLeft: 8 }}>{match.displayName}</span>
+            <span className="text-xs text-[var(--text-muted)] ml-2">{match.displayName}</span>
           )}
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color }}>{pct}%</div>
-          <div style={{ fontSize: 11, color: '#6b6b6b' }}>{match.matchType.replace(/_/g, ' ')}</div>
+        <div className="text-right">
+          <div className="text-xl font-bold" style={{ color }}>{pct}%</div>
+          <div className="text-[11px] text-[var(--text-muted)]">{match.matchType.replace(/_/g, ' ')}</div>
         </div>
       </div>
 
       {match.matchReason && (
-        <div style={{ fontSize: 12, color: '#1a1a1a', marginBottom: 8, lineHeight: 1.5 }}>
+        <div className="text-xs text-[var(--text)] mb-2 leading-relaxed">
           {match.matchReason}
         </div>
       )}
 
       <DeltaTable snapshot={match.comparisonSnapshot} />
 
-      <div style={{ marginTop: 10 }}>
+      <div className="mt-2.5">
         <a
           href={`/products?search=${encodeURIComponent(match.catalogNumber)}`}
-          style={{ fontSize: 12, color: '#0078d4', textDecoration: 'none' }}
+          className="text-xs text-[var(--blue,#0078d4)]"
         >
           View Product →
         </a>
@@ -93,30 +90,14 @@ interface RejectCardProps {
 
 export function RejectCard({ reject }: RejectCardProps) {
   return (
-    <div style={{
-      border: '1px solid #e0e0e0',
-      background: '#f9f9f9',
-      padding: '10px 14px',
-      marginBottom: 6,
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    }}>
+    <div className="border border-[var(--border)] bg-white p-2.5 px-3.5 mb-1.5 flex justify-between items-center">
       <div>
-        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: '#6b6b6b' }}>
+        <span className="text-[13px] font-semibold text-[var(--text-muted)]" style={{ fontFamily: 'var(--font-mono)' }}>
           {reject.catalogNumber}
         </span>
-        <span style={{ fontSize: 11, color: '#aaa', marginLeft: 8 }}>{reject.detail}</span>
+        <span className="text-[11px] text-[var(--text-faint)] ml-2">{reject.detail}</span>
       </div>
-      <span style={{
-        fontSize: 10,
-        background: '#d13438',
-        color: '#fff',
-        padding: '2px 6px',
-        whiteSpace: 'nowrap',
-        flexShrink: 0,
-        marginLeft: 12,
-      }}>
+      <span className="text-[10px] bg-[var(--accent)] text-white px-1.5 py-0.5 whitespace-nowrap shrink-0 ml-3">
         {reject.reason.replace(/_/g, ' ')}
       </span>
     </div>

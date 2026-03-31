@@ -96,7 +96,7 @@ export default function Sidebar() {
       background: 'var(--surface)',
       borderRight: '1px solid var(--border)',
       position: 'fixed',
-      top: 44,
+      top: 48,
       left: 0,
       bottom: 0,
       display: 'flex',

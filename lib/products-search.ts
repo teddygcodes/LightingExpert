@@ -3,6 +3,7 @@
 
 import { prisma } from '@/lib/db'
 import { Prisma, CanonicalFixtureType } from '@prisma/client'
+import { FORM_FACTOR_MAP } from '@/lib/crawler/normalize'
 
 export async function getDescendantCategoryIds(rootId: string, manufacturerId: string): Promise<string[]> {
   const all = await prisma.category.findMany({
@@ -172,7 +173,7 @@ export async function searchProducts(params: SearchProductsParams): Promise<Sear
   }
 
   // Form factor / shape tokens — match against the formFactor DB field.
-  // Grid sizes (e.g. "2x4") use direct contains.
+  // Grid sizes (e.g. "2x4") use exact match via FORM_FACTOR_MAP normalization.
   // Shape descriptors (e.g. "round") map to multiple formFactor patterns
   // because the DB stores values like "UFO", "ROUND_UFO", "4_INCH_ROUND", "CIRCULAR_HIGH_BAY".
   if (params.query) {
@@ -190,7 +191,12 @@ export async function searchProducts(params: SearchProductsParams): Promise<Sear
 
     if (gridTokens.length > 0 || shapeTokens.length > 0) {
       const ffClauses: Prisma.ProductWhereInput[] = [
-        ...gridTokens.map(t => ({ formFactor: { contains: t, mode: 'insensitive' as const } })),
+        ...gridTokens.map(t => {
+          const normalized = FORM_FACTOR_MAP[t.toLowerCase()]
+          return normalized
+            ? { formFactor: { equals: normalized, mode: 'insensitive' as const } }
+            : { formFactor: { contains: t, mode: 'insensitive' as const } }
+        }),
         ...shapeTokens.flatMap(t =>
           (SHAPE_TOKEN_MAP[t.toLowerCase()] ?? []).map(p => ({ formFactor: { contains: p, mode: 'insensitive' as const } }))
         ),

@@ -74,92 +74,98 @@ export default function FixtureScheduleTable({ submittalId, items, onItemsChange
 
   if (items.length === 0) {
     return (
-      <div style={{ padding: '30px', textAlign: 'center', color: '#6b6b6b', border: '1px dashed #ccc', fontSize: 13 }}>
+      <div className="p-[30px] text-center text-[var(--text-muted)] border border-dashed border-[var(--border-strong)] text-[13px]">
         No fixtures added yet. Use the form below to add fixture types.
       </div>
     )
   }
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-      <thead>
-        <tr style={{ background: '#1a1a1a', color: '#fff' }}>
-          <th style={{ padding: '7px 10px', textAlign: 'left', width: 50 }}>TYPE</th>
-          <th style={{ padding: '7px 10px', textAlign: 'left' }}>CATALOG #</th>
-          <th style={{ padding: '7px 10px', textAlign: 'left' }}>DESCRIPTION</th>
-          <th style={{ padding: '7px 10px', textAlign: 'left' }}>MANUFACTURER</th>
-          <th style={{ padding: '7px 10px', textAlign: 'center', width: 50 }}>QTY</th>
-          <th style={{ padding: '7px 10px', textAlign: 'left' }}>LOCATION</th>
-          <th style={{ padding: '7px 10px', textAlign: 'left' }}>NOTES</th>
-          <th style={{ padding: '7px 10px', textAlign: 'center', width: 80 }}>ORDER</th>
-          <th style={{ padding: '7px 10px', textAlign: 'center', width: 50 }}></th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item, idx) => (
-          <tr key={item.id} style={{ background: idx % 2 === 0 ? '#f9f9f9' : '#fff', borderBottom: '1px solid #e0e0e0' }}>
-            <td style={{ padding: '7px 10px', fontWeight: 700, fontFamily: 'monospace' }}>{item.fixtureType}</td>
-            <td
-              style={{ padding: '7px 10px', fontFamily: 'monospace', color: '#d13438', cursor: 'pointer' }}
-              title="Click to edit catalog number"
-            >
-              {editingCatalog === item.id ? (
-                <input
-                  ref={inputRef}
-                  value={editValue}
-                  onChange={e => setEditValue(e.target.value)}
-                  onBlur={() => commitCatalogEdit(item.id, item.catalogNumberOverride ?? item.product.catalogNumber)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') commitCatalogEdit(item.id, item.catalogNumberOverride ?? item.product.catalogNumber)
-                    if (e.key === 'Escape') setEditingCatalog(null)
-                  }}
-                  style={{
-                    fontFamily: 'monospace', fontSize: 12, color: '#d13438',
-                    background: '#fff8e1', border: '1px solid #f0a500',
-                    padding: '1px 4px', width: '100%', minWidth: 120,
-                  }}
-                  autoFocus
-                />
-              ) : (
-                <span onClick={() => startEditCatalog(item)}>
-                  {item.catalogNumberOverride ?? item.product.catalogNumber}
-                </span>
-              )}
-            </td>
-            <td style={{ padding: '7px 10px', color: '#333' }}>{item.product.displayName ?? '—'}</td>
-            <td style={{ padding: '7px 10px', color: '#6b6b6b' }}>{item.product.manufacturer?.name ?? '—'}</td>
-            <td style={{ padding: '7px 10px', textAlign: 'center' }}>{item.quantity}</td>
-            <td style={{ padding: '7px 10px', color: '#6b6b6b' }}>{item.location ?? '—'}</td>
-            <td style={{ padding: '7px 10px', color: '#6b6b6b' }}>{item.notes ?? '—'}</td>
-            <td style={{ padding: '7px 10px', textAlign: 'center' }}>
-              <button
-                onClick={() => reorder(item.id, 'up')}
-                disabled={idx === 0 || loading !== null}
-                style={{ background: 'none', border: '1px solid #ccc', padding: '2px 6px', cursor: idx === 0 ? 'not-allowed' : 'pointer', marginRight: 2, opacity: idx === 0 ? 0.3 : 1 }}
-              >
-                ↑
-              </button>
-              <button
-                onClick={() => reorder(item.id, 'down')}
-                disabled={idx === items.length - 1 || loading !== null}
-                style={{ background: 'none', border: '1px solid #ccc', padding: '2px 6px', cursor: idx === items.length - 1 ? 'not-allowed' : 'pointer', opacity: idx === items.length - 1 ? 0.3 : 1 }}
-              >
-                ↓
-              </button>
-            </td>
-            <td style={{ padding: '7px 10px', textAlign: 'center' }}>
-              <button
-                onClick={() => removeItem(item.id)}
-                disabled={loading !== null}
-                style={{ background: 'none', border: 'none', color: '#d13438', cursor: 'pointer', fontSize: 14 }}
-                title="Remove"
-              >
-                ×
-              </button>
-            </td>
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style={{ width: 50 }}>Type</th>
+            <th>Catalog #</th>
+            <th>Description</th>
+            <th>Manufacturer</th>
+            <th className="text-center" style={{ width: 50 }}>Qty</th>
+            <th>Location</th>
+            <th>Notes</th>
+            <th className="text-center" style={{ width: 80 }}>Order</th>
+            <th className="text-center" style={{ width: 50 }}></th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {items.map((item, idx) => (
+            <tr key={item.id}>
+              <td className="font-bold" style={{ fontFamily: 'var(--font-mono)' }}>{item.fixtureType}</td>
+              <td
+                className="cursor-pointer"
+                style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}
+                title="Click to edit catalog number"
+              >
+                {editingCatalog === item.id ? (
+                  <input
+                    ref={inputRef}
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    onBlur={() => commitCatalogEdit(item.id, item.catalogNumberOverride ?? item.product.catalogNumber)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitCatalogEdit(item.id, item.catalogNumberOverride ?? item.product.catalogNumber)
+                      if (e.key === 'Escape') setEditingCatalog(null)
+                    }}
+                    className="text-xs w-full min-w-[120px]"
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--accent)',
+                      background: '#fff8e1',
+                      border: '1px solid #f0a500',
+                      padding: '1px 4px',
+                    }}
+                    autoFocus
+                  />
+                ) : (
+                  <span onClick={() => startEditCatalog(item)}>
+                    {item.catalogNumberOverride ?? item.product.catalogNumber}
+                  </span>
+                )}
+              </td>
+              <td className="text-[var(--text-secondary)]">{item.product.displayName ?? '—'}</td>
+              <td className="text-[var(--text-muted)]">{item.product.manufacturer?.name ?? '—'}</td>
+              <td className="text-center">{item.quantity}</td>
+              <td className="text-[var(--text-muted)]">{item.location ?? '—'}</td>
+              <td className="text-[var(--text-muted)]">{item.notes ?? '—'}</td>
+              <td className="text-center">
+                <button
+                  onClick={() => reorder(item.id, 'up')}
+                  disabled={idx === 0 || loading !== null}
+                  className="bg-none border border-[var(--border-strong)] px-1.5 py-0.5 cursor-pointer mr-0.5 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  ↑
+                </button>
+                <button
+                  onClick={() => reorder(item.id, 'down')}
+                  disabled={idx === items.length - 1 || loading !== null}
+                  className="bg-none border border-[var(--border-strong)] px-1.5 py-0.5 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  ↓
+                </button>
+              </td>
+              <td className="text-center">
+                <button
+                  onClick={() => removeItem(item.id)}
+                  disabled={loading !== null}
+                  className="bg-none border-none text-[var(--accent)] cursor-pointer text-sm"
+                  title="Remove"
+                >
+                  ×
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

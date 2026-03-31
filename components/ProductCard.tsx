@@ -18,91 +18,77 @@ interface ProductCardProps {
   thumbnailUrl?: string
 }
 
-function confidenceColor(score: number | null): string {
-  if (!score) return '#999'
-  if (score >= 0.8) return '#107c10'
-  if (score >= 0.5) return '#f7a600'
-  return '#d13438'
+function confidenceBadge(score: number | null) {
+  if (!score) return { color: 'var(--text-faint)', bg: 'var(--bg)' }
+  if (score >= 0.8) return { color: '#107c10', bg: '#e8f5e8' }
+  if (score >= 0.5) return { color: '#9a6700', bg: '#fff3cd' }
+  return { color: '#d13438', bg: '#fde7e9' }
 }
 
 const ProductCard = memo(function ProductCard({ product, thumbnailUrl }: ProductCardProps) {
   const [imgFailed, setImgFailed] = useState(false)
   const confidence = product.overallConfidence
   const pct = confidence ? Math.round(confidence * 100) : 0
+  const badge = confidenceBadge(confidence)
 
   return (
     <Link
       href={`/products/${product.id}`}
-      style={{
-        display: 'block',
-        background: '#fff',
-        border: '1px solid #e0e0e0',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-        textDecoration: 'none',
-        color: 'inherit',
-        overflow: 'hidden',
-      }}
+      className="product-card block bg-white border border-[var(--border)] shadow-[var(--shadow-sm)] no-underline text-inherit overflow-hidden"
     >
       {/* Thumbnail */}
-      <div style={{
-        height: 140,
-        background: '#f0f0f0',
-        overflow: 'hidden',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
+      <div className="h-[140px] bg-[var(--bg)] overflow-hidden flex items-center justify-center">
         {thumbnailUrl && !imgFailed ? (
           <img
             src={thumbnailUrl}
             alt={product.displayName || product.catalogNumber}
             onError={() => setImgFailed(true)}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }}
+            className="w-full h-full object-cover object-top"
           />
         ) : (
-          <span style={{ color: '#ccc', fontSize: 11 }}>No image</span>
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="opacity-25">
+            <rect x="4" y="6" width="24" height="16" stroke="var(--text-muted)" strokeWidth="1.5" fill="none" />
+            <circle cx="16" cy="14" r="4" stroke="var(--text-muted)" strokeWidth="1.5" fill="none" />
+            <path d="M4 22l7-5 5 4 4-3 8 6" stroke="var(--text-muted)" strokeWidth="1.5" fill="none" />
+          </svg>
         )}
       </div>
 
       {/* Content */}
-      <div style={{ padding: '12px 14px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, fontFamily: 'monospace' }}>
+      <div className="px-3.5 py-3">
+        <div className="flex justify-between items-start mb-1">
+          <div className="font-semibold text-[13px]" style={{ fontFamily: 'var(--font-mono)' }}>
             {product.catalogNumber}
           </div>
-          <div style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: confidenceColor(confidence),
-            background: '#f3f3f3',
-            padding: '2px 6px',
-            flexShrink: 0,
-          }}>
+          <div
+            className="text-[11px] font-semibold px-1.5 py-0.5 shrink-0"
+            style={{ color: badge.color, background: badge.bg }}
+          >
             {pct}%
           </div>
         </div>
 
         {product.displayName && (
-          <div style={{ fontSize: 12, color: '#1a1a1a', marginBottom: 2, lineHeight: 1.4 }}>
+          <div className="text-xs text-[var(--text)] mb-0.5 leading-snug">
             {product.displayName}
           </div>
         )}
 
         {product.familyName && (
-          <div style={{ fontSize: 11, color: '#6b6b6b', marginBottom: 6 }}>
+          <div className="text-[11px] text-[var(--text-muted)] mb-1.5">
             {product.familyName}
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: product.familyName || product.displayName ? 6 : 0 }}>
+        <div className="flex gap-1.5 flex-wrap items-center" style={{ marginTop: product.familyName || product.displayName ? 6 : 0 }}>
           {!!product.wattage && (
-            <span style={{ fontSize: 11, color: '#6b6b6b' }}>{product.wattage}W</span>
+            <span className="text-[11px] text-[var(--text-muted)]" style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}>{product.wattage}W</span>
           )}
           {!!product.lumens && (
-            <span style={{ fontSize: 11, color: '#6b6b6b' }}>{product.lumens.toLocaleString()}lm</span>
+            <span className="text-[11px] text-[var(--text-muted)]" style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}>{product.lumens.toLocaleString()}lm</span>
           )}
           {!!product.cri && (
-            <span style={{ fontSize: 11, color: '#6b6b6b' }}>CRI {product.cri}</span>
+            <span className="text-[11px] text-[var(--text-muted)]" style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.02em' }}>CRI {product.cri}</span>
           )}
         </div>
       </div>
