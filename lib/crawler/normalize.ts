@@ -27,6 +27,17 @@ export const VOLTAGE_MAP: Record<string, Voltage> = {
   'universal (120-277v)': Voltage.V120_277,
   'multi-volt': Voltage.UNIVERSAL,
   'multivolt': Voltage.UNIVERSAL,
+  // Acuity-specific multi-voltage shorthand
+  'mvolt': Voltage.UNIVERSAL,
+  'xvolt': Voltage.UNIVERSAL,
+  'hvolt': Voltage.UNIVERSAL,
+  // Enum name aliases (for re-normalization safety)
+  'v120': Voltage.V120,
+  'v277': Voltage.V277,
+  'v120_277': Voltage.V120_277,
+  'v347': Voltage.V347,
+  'v347_480': Voltage.V347_480,
+  'v120_347': Voltage.V120_347,
 }
 
 // ─── Dimming Type Map ─────────────────────────────────────────────────────────
@@ -139,6 +150,66 @@ export function normalizeFormFactor(raw: string): string {
 export function normalizeVoltage(raw: string): Voltage | undefined {
   const normalized = raw.toLowerCase().trim()
   return VOLTAGE_MAP[normalized]
+}
+
+/**
+ * Analyze a comma/semicolon-separated list of voltage options and return
+ * the most representative Voltage enum value.
+ *
+ * Strategy:
+ * 1. Split tokens, normalize each individually
+ * 2. If any token is a universal keyword (MVOLT, XVOLT, HVOLT, etc.) → UNIVERSAL
+ * 3. If tokens span both low-voltage (120/208/240) AND high-voltage (347/480) → UNIVERSAL
+ * 4. If tokens include both 120 and 277 → V120_277
+ * 5. Else pick the best single match (prefer multi-voltage enums over single)
+ */
+export function normalizeVoltageList(raw: string): Voltage | undefined {
+  const tokens = raw.split(/[,;]/).map(s => s.trim().toLowerCase()).filter(Boolean)
+  if (tokens.length === 0) return undefined
+
+  // Check for universal keywords first
+  const universalKeywords = ['universal', 'multi-volt', 'multivolt', 'mvolt', 'xvolt', 'hvolt']
+  if (tokens.some(t => universalKeywords.includes(t))) return Voltage.UNIVERSAL
+
+  // Collect all individual enum matches and raw numeric voltages
+  const enumValues = new Set<Voltage>()
+  const numericVoltages = new Set<number>()
+
+  for (const tok of tokens) {
+    const v = normalizeVoltage(tok)
+    if (v) enumValues.add(v)
+    const numMatch = tok.match(/^(\d{3})/)
+    if (numMatch) numericVoltages.add(parseInt(numMatch[1]))
+  }
+
+  if (enumValues.has(Voltage.UNIVERSAL)) return Voltage.UNIVERSAL
+
+  // Check coverage: low-voltage + high-voltage → UNIVERSAL
+  const hasLow = numericVoltages.has(120) || numericVoltages.has(208) || numericVoltages.has(240)
+  const hasMid = numericVoltages.has(277)
+  const hasHigh = numericVoltages.has(347) || numericVoltages.has(480)
+
+  if (hasLow && hasHigh) return Voltage.UNIVERSAL
+  if (hasMid && hasHigh) return Voltage.UNIVERSAL
+
+  // Prefer broadest multi-voltage enum that matched
+  if (enumValues.has(Voltage.V120_347)) return Voltage.V120_347
+  if (enumValues.has(Voltage.V347_480)) return Voltage.V347_480
+  if (enumValues.has(Voltage.V120_277)) return Voltage.V120_277
+
+  // Check if 120 AND 277 both present even without explicit "120-277" token
+  if (numericVoltages.has(120) && numericVoltages.has(277)) return Voltage.V120_277
+
+  // Single token — fall back to normalizeVoltage
+  if (tokens.length === 1) return normalizeVoltage(tokens[0])
+
+  // Multiple tokens but no broad coverage — pick first recognizable enum
+  for (const tok of tokens) {
+    const v = normalizeVoltage(tok)
+    if (v) return v
+  }
+
+  return undefined
 }
 
 export function normalizeDimmingTypes(raw: string): DimmingType[] {

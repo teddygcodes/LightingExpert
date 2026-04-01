@@ -18,6 +18,7 @@ import { extractByAI, computeOverallConfidence } from './parser'
 import type { RawSpecs } from './parser'
 import {
   normalizeVoltage,
+  normalizeVoltageList,
   normalizeDimmingTypes,
   normalizeMountingTypes,
   normalizeFormFactor,
@@ -376,10 +377,9 @@ function parseLutronSpecs(
   // ── Voltage ──────────────────────────────────────────────────────────────────
   const voltRaw = get('Voltage', 'Input Voltage', 'Voltage Rating', 'Supply Voltage', 'Line Voltage')
   if (voltRaw) {
-    const tokens = voltRaw.split(/[,;]/).map(s => s.trim())
-    const matched = tokens.find(tok => normalizeVoltage(tok) !== undefined)
-    specs.voltage = (matched ?? tokens[0]).trim()
-    provenance.voltage = matched ? fp(voltRaw) : fpLow(voltRaw)
+    const bestVoltage = normalizeVoltageList(voltRaw)
+    specs.voltage = bestVoltage ?? voltRaw.split(/[,;]/)[0].trim()
+    provenance.voltage = bestVoltage ? fp(voltRaw) : fpLow(voltRaw)
   }
 
   // ── Dimming ──────────────────────────────────────────────────────────────────

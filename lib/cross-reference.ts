@@ -2,6 +2,7 @@ import { Product, MatchType, CrossRefSource, CanonicalFixtureType, Prisma } from
 import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from './db'
 import type { HardRejectReason, CrossRefMatch, CrossRefReject, ComparisonSnapshot } from './types'
+import { resolveProductTier } from '@/lib/agent/recommend'
 
 const CLAUDE_FAST_MODEL = process.env.CLAUDE_FAST_MODEL ?? 'claude-haiku-4-5-20251001'
 
@@ -29,6 +30,8 @@ export interface CrossReferenceConfig {
   penalties: {
     wetLocation: number
     nemaRating: number
+    tierMismatch: number
+    tierMismatchSevere: number
   }
 }
 
@@ -53,6 +56,8 @@ export const DEFAULT_CROSS_REF_CONFIG: CrossReferenceConfig = {
   penalties: {
     wetLocation: 0.05,
     nemaRating: 0.04,
+    tierMismatch: 0.12,
+    tierMismatchSevere: 0.20,
   },
 }
 
@@ -193,7 +198,7 @@ interface ScoreResult {
   reasons: string[]
 }
 
-function scoreMatch(source: Product, target: Product, cfg: CrossReferenceConfig = DEFAULT_CROSS_REF_CONFIG): ScoreResult {
+function scoreMatch(source: ProductWithManufacturer, target: ProductWithManufacturer, cfg: CrossReferenceConfig = DEFAULT_CROSS_REF_CONFIG): ScoreResult {
   let score = 0
   const reasons: string[] = []
   const w = cfg.weights
@@ -372,12 +377,27 @@ function scoreMatch(source: Product, target: Product, cfg: CrossReferenceConfig 
     reasons.push(`Source has NEMA ${source.nemaRating} rating; target unrated — confirm environment requirements`)
   }
 
+  // Product tier mismatch penalty (contractor vs commercial vs premium)
+  const sourceTier = resolveProductTier(source.manufacturer?.slug ?? '', source.familyName)
+  const targetTier = resolveProductTier(target.manufacturer?.slug ?? '', target.familyName)
+  if (sourceTier !== targetTier) {
+    const TIER_ORDER: Record<string, number> = { contractor: 0, commercial: 1, premium: 2, specialty: 2 }
+    const gap = Math.abs((TIER_ORDER[sourceTier] ?? 1) - (TIER_ORDER[targetTier] ?? 1))
+    if (gap >= 2) {
+      score -= cfg.penalties.tierMismatchSevere
+      reasons.push(`Product tier mismatch: source is ${sourceTier}, target is ${targetTier}`)
+    } else {
+      score -= cfg.penalties.tierMismatch
+      reasons.push(`Product tier differs: ${sourceTier} vs ${targetTier}`)
+    }
+  }
+
   return { score: Math.min(1, Math.round(score * 100) / 100), reasons }
 }
 
 // ─── Match Type Determination ─────────────────────────────────────────────────
 
-function determineMatchType(score: number, source: Product, target: Product, cfg: CrossReferenceConfig = DEFAULT_CROSS_REF_CONFIG): MatchType {
+function determineMatchType(score: number, source: ProductWithManufacturer, target: ProductWithManufacturer, cfg: CrossReferenceConfig = DEFAULT_CROSS_REF_CONFIG): MatchType {
   const t = cfg.matchThresholds
   if (score >= t.directReplacement) return MatchType.DIRECT_REPLACEMENT
   if (score >= t.functionalEquivalent) return MatchType.FUNCTIONAL_EQUIVALENT
@@ -393,7 +413,7 @@ function determineMatchType(score: number, source: Product, target: Product, cfg
 
 // ─── Comparison Snapshot ──────────────────────────────────────────────────────
 
-function buildComparisonSnapshot(source: Product, target: Product): ComparisonSnapshot {
+function buildComparisonSnapshot(source: ProductWithManufacturer, target: ProductWithManufacturer): ComparisonSnapshot {
   const snapFields = ['catalogNumber', 'lumens', 'lumensMin', 'lumensMax', 'wattage', 'wattageMin', 'wattageMax', 'cri', 'cctOptions', 'voltage', 'ipRating', 'nemaRating', 'formFactor']
 
   const srcSnap: Record<string, unknown> = {}
@@ -481,6 +501,10 @@ function buildComparisonSnapshot(source: Product, target: Product): ComparisonSn
       deltas.dimming = `Source: ${source.dimmingType.join('/')}; Target: ${target.dimmingType.join('/')} — verify controls`
     }
   }
+
+  // Product tier
+  srcSnap.productTier = resolveProductTier(source.manufacturer?.slug ?? '', source.familyName)
+  tgtSnap.productTier = resolveProductTier(target.manufacturer?.slug ?? '', target.familyName)
 
   return { source: srcSnap, target: tgtSnap, deltas }
 }

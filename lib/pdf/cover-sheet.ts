@@ -147,9 +147,9 @@ export async function buildCoverSheet(
   // PROJECT INFO — two-column layout below title band
   // ─────────────────────────────────────────────────────────────────────
   const BASE_Y    = curY - 30
-  const LEFT_X    = SIDE
   const CENTER_X  = width / 2
-  const RIGHT_X   = CENTER_X + 16
+  const RIGHT_X   = CENTER_X + 50
+  const LEFT_X    = CENTER_X - 16 - 160 // mirror RIGHT_X gap, left-anchored for ~160pt text block
   const LINE_SM   = 14
   const LINE_MD   = 20
 

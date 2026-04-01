@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   normalizeFormFactor,
   normalizeVoltage,
+  normalizeVoltageList,
   normalizeDimmingTypes,
   normalizeMountingTypes,
   pickBestSpecSheet,
@@ -87,6 +88,49 @@ describe('normalizeVoltage', () => {
   it('is case insensitive', () => {
     expect(normalizeVoltage('UNIVERSAL')).toBe('UNIVERSAL')
     expect(normalizeVoltage('Universal')).toBe('UNIVERSAL')
+  })
+})
+
+// ─── normalizeVoltageList ────────────────────────────────────────────────────
+
+describe('normalizeVoltageList', () => {
+  it('single token delegates to normalizeVoltage', () => {
+    expect(normalizeVoltageList('120')).toBe('V120')
+    expect(normalizeVoltageList('120-277')).toBe('V120_277')
+    expect(normalizeVoltageList('universal')).toBe('UNIVERSAL')
+  })
+
+  it('multi-token spanning 120-480 returns UNIVERSAL', () => {
+    expect(normalizeVoltageList('120, 120-277, 208, 240, 277, 347, 347-480, 480')).toBe('UNIVERSAL')
+  })
+
+  it('multi-token with 277 and 347 returns UNIVERSAL', () => {
+    expect(normalizeVoltageList('120, 120-277, 208, 240, 277, 277-480, 347, 347-480, 480')).toBe('UNIVERSAL')
+  })
+
+  it('multi-token with 120 and 277 but no high voltage returns V120_277', () => {
+    expect(normalizeVoltageList('120, 120-277, 208, 240, 277')).toBe('V120_277')
+  })
+
+  it('infers V120_277 from separate 120 and 277 tokens', () => {
+    expect(normalizeVoltageList('120, 277')).toBe('V120_277')
+  })
+
+  it('MVOLT/XVOLT/HVOLT keywords return UNIVERSAL', () => {
+    expect(normalizeVoltageList('120, 208, 240, 277, 347, 480, HVOLT, MVOLT, XVOLT')).toBe('UNIVERSAL')
+  })
+
+  it('empty string returns undefined', () => {
+    expect(normalizeVoltageList('')).toBeUndefined()
+  })
+
+  it('handles DC voltage tokens gracefully', () => {
+    // Products like Phuzion Crane Light: "120, 120-277, 125VDC, 208, 240, 250VDC, 277, 277-480, 347, 347-480, 480"
+    expect(normalizeVoltageList('120, 120-277, 125VDC, 208, 240, 250VDC, 277, 277-480, 347, 347-480, 480')).toBe('UNIVERSAL')
+  })
+
+  it('single unknown token returns undefined', () => {
+    expect(normalizeVoltageList('Low Voltage')).toBeUndefined()
   })
 })
 

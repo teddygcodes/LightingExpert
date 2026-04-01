@@ -22,8 +22,10 @@ const MANUFACTURER_TIER_FALLBACK: Record<string, BrandTier> = {
 // Family name keyword overrides — checked against product.familyName, case-insensitive
 // Highest-priority first. First match wins.
 const FAMILY_TIER_KEYWORDS: { keywords: string[]; tier: BrandTier }[] = [
-  { keywords: ['premium', 'architectural', 'designer', 'select', 'ultra', 'prestige', 'luxe'], tier: 'premium' },
-  { keywords: ['contractor', 'value', 'economy', 'basic'], tier: 'contractor' },
+  { keywords: ['premium', 'architectural', 'designer', 'select', 'ultra', 'prestige', 'luxe',
+               'holophane', 'holobay', 'petrolux', 'phuzion', 'vantage', 'peerless', 'gotham',
+               'winona', 'a-light', 'hydrel', 'mark'], tier: 'premium' },
+  { keywords: ['contractor', 'value', 'economy', 'basic', 'ibe ', 'i-beam® ibe'], tier: 'contractor' },
 ]
 
 export function resolveProductTier(manufacturerSlug: string, familyName?: string | null): BrandTier {
